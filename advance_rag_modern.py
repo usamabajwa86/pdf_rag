@@ -924,28 +924,102 @@ with tab2:
             if 'found_pdfs' not in st.session_state:
                 st.session_state.found_pdfs = []
 
-            pdf_folder = st.text_input("📁 PDF Folder Path", value="Data")
-            save_folder = st.text_input("💾 Save Location", value="vector_databases")
+            st.markdown("""
+            <div class="glass-panel">
+                <h4 style="color: white; margin-bottom: 1rem;">📂 Select PDF Source Folder</h4>
+                <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
+                    Choose the folder containing your PDF documents to process
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-            if st.button("🔍 Check PDFs", key="check_pdfs"):
-                if os.path.exists(pdf_folder):
-                    pdf_files = get_all_pdfs(pdf_folder)
-                    st.session_state.found_pdfs = pdf_files
-                    st.session_state.pdf_folder = pdf_folder
-                    st.session_state.save_folder = save_folder
-                    if pdf_files:
-                        st.success(f"✅ Found {len(pdf_files)} PDF file(s)")
-                    else:
-                        st.error("❌ No PDF files found")
+            # Get current directory and list available folders
+            current_dir = os.getcwd()
+            
+            # Get list of directories in workspace
+            available_folders = ["Data"]  # Default folder
+            try:
+                for item in os.listdir(current_dir):
+                    full_path = os.path.join(current_dir, item)
+                    if os.path.isdir(full_path) and not item.startswith('.') and item not in ['vector_databases', 'vector_databases_azhar', '__pycache__', 'assets']:
+                        if item not in available_folders:
+                            available_folders.append(item)
+            except:
+                pass
+
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Folder selection dropdown
+                selected_folder = st.selectbox(
+                    "📁 Select Folder",
+                    available_folders,
+                    help="Choose a folder from your workspace"
+                )
+                
+                # Option to enter custom path
+                use_custom = st.checkbox("Use custom folder path", key="use_custom_path")
+                
+                if use_custom:
+                    pdf_folder = st.text_input(
+                        "Custom Folder Path",
+                        value=selected_folder,
+                        placeholder="/path/to/your/pdfs",
+                        help="Enter the full path to your PDF folder"
+                    )
                 else:
-                    st.error("❌ Folder does not exist")
+                    pdf_folder = selected_folder
+
+            with col2:
+                save_folder = st.text_input(
+                    "💾 Database Save Location",
+                    value="vector_databases",
+                    help="Where to save the vector database"
+                )
+
+            st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+
+            if st.button("🔍 Scan Selected Folder", key="check_pdfs", use_container_width=True):
+                if os.path.exists(pdf_folder):
+                    with st.spinner(f"Scanning {pdf_folder} for PDF files..."):
+                        pdf_files = get_all_pdfs(pdf_folder)
+                        st.session_state.found_pdfs = pdf_files
+                        st.session_state.pdf_folder = pdf_folder
+                        st.session_state.save_folder = save_folder
+                        
+                        if pdf_files:
+                            st.success(f"✅ Found {len(pdf_files)} PDF file(s) in {pdf_folder}")
+                            
+                            # Show preview of found files
+                            with st.expander("📄 View Found PDFs", expanded=True):
+                                for i, pdf in enumerate(pdf_files[:10], 1):  # Show first 10
+                                    st.markdown(f"**{i}.** `{pdf.name}` ({pdf.parent})")
+                                if len(pdf_files) > 10:
+                                    st.markdown(f"*... and {len(pdf_files) - 10} more files*")
+                        else:
+                            st.error(f"❌ No PDF files found in {pdf_folder}")
+                            st.info("💡 Make sure your folder contains .pdf files")
+                else:
+                    st.error(f"❌ Folder does not exist: {pdf_folder}")
+                    st.info("💡 Please check the folder path and try again")
 
             # Show create button if PDFs are found
             if st.session_state.found_pdfs:
                 st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
-                st.info(f"Ready to process {len(st.session_state.found_pdfs)} PDF file(s)")
+                
+                st.markdown(f"""
+                <div class="glass-panel" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
+                    <h4 style="color: #10b981; margin-bottom: 0.5rem;">✅ Ready to Process</h4>
+                    <p style="color: rgba(255,255,255,0.8); margin: 0;">
+                        <strong>{len(st.session_state.found_pdfs)} PDF files</strong> will be processed from <strong>{st.session_state.pdf_folder}</strong>
+                    </p>
+                    <p style="color: rgba(255,255,255,0.6); margin: 0.5rem 0 0 0; font-size: 0.9rem;">
+                        This will create text chunks and vector embeddings for intelligent search
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
 
-                if st.button("🚀 Create Database", key="create_db"):
+                if st.button("🚀 Create Vector Database", key="create_db", use_container_width=True):
                     result = create_new_database(
                         st.session_state.found_pdfs,
                         st.session_state.save_folder
