@@ -769,6 +769,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Clear Streamlit cache on startup (force fresh scan)
+st.cache_data.clear()
+st.cache_resource.clear()
+
 # Initialize Session State
 if 'database_loaded' not in st.session_state:
     st.session_state.database_loaded = False
