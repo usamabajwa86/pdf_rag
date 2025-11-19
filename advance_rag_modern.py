@@ -923,85 +923,161 @@ with tab2:
             # Initialize session state for PDFs
             if 'found_pdfs' not in st.session_state:
                 st.session_state.found_pdfs = []
+            if 'uploaded_files' not in st.session_state:
+                st.session_state.uploaded_files = []
 
             st.markdown("""
             <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">📂 Select PDF Source Folder</h4>
+                <h4 style="color: white; margin-bottom: 1rem;">📂 Select PDF Source</h4>
                 <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
-                    Choose the folder containing your PDF documents to process
+                    Choose how to provide your PDF documents
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
-            # Get current directory and list available folders
-            current_dir = os.getcwd()
-            
-            # Get list of directories in workspace
-            available_folders = ["Data"]  # Default folder
-            try:
-                for item in os.listdir(current_dir):
-                    full_path = os.path.join(current_dir, item)
-                    if os.path.isdir(full_path) and not item.startswith('.') and item not in ['vector_databases', 'vector_databases_azhar', '__pycache__', 'assets']:
-                        if item not in available_folders:
-                            available_folders.append(item)
-            except:
-                pass
+            # Source selection
+            source_option = st.radio(
+                "📁 PDF Source",
+                ["📤 Upload Files (Drag & Drop)", "📂 Use Server Folder"],
+                horizontal=True,
+                help="Choose to upload files from your computer or use files from server"
+            )
 
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                # Folder selection dropdown
-                selected_folder = st.selectbox(
-                    "📁 Select Folder",
-                    available_folders,
-                    help="Choose a folder from your workspace"
+            if source_option == "📤 Upload Files (Drag & Drop)":
+                st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+                
+                st.markdown("""
+                <div class="glass-panel" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3);">
+                    <h4 style="color: #a78bfa; margin-bottom: 0.5rem;">📤 Upload Your PDF Files</h4>
+                    <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0;">
+                        Drag and drop PDF files below or click to browse
+                    </p>
+                    <p style="color: rgba(255,255,255,0.6); margin: 0; font-size: 0.9rem;">
+                        You can upload multiple files at once
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                uploaded_files = st.file_uploader(
+                    "Choose PDF files",
+                    type=['pdf'],
+                    accept_multiple_files=True,
+                    key="pdf_uploader",
+                    help="Select one or more PDF files from your computer"
                 )
-                
-                # Option to enter custom path
-                use_custom = st.checkbox("Use custom folder path", key="use_custom_path")
-                
-                if use_custom:
-                    pdf_folder = st.text_input(
-                        "Custom Folder Path",
-                        value=selected_folder,
-                        placeholder="/path/to/your/pdfs",
-                        help="Enter the full path to your PDF folder"
-                    )
-                else:
-                    pdf_folder = selected_folder
 
-            with col2:
                 save_folder = st.text_input(
                     "💾 Database Save Location",
                     value="vector_databases",
                     help="Where to save the vector database"
                 )
 
-            st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+                if uploaded_files:
+                    st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+                    
+                    # Show uploaded files preview
+                    with st.expander(f"📄 Uploaded Files ({len(uploaded_files)})", expanded=True):
+                        for i, uploaded_file in enumerate(uploaded_files, 1):
+                            file_size = uploaded_file.size / 1024  # KB
+                            st.markdown(f"**{i}.** `{uploaded_file.name}` ({file_size:.1f} KB)")
 
-            if st.button("🔍 Scan Selected Folder", key="check_pdfs", use_container_width=True):
-                if os.path.exists(pdf_folder):
-                    with st.spinner(f"Scanning {pdf_folder} for PDF files..."):
-                        pdf_files = get_all_pdfs(pdf_folder)
-                        st.session_state.found_pdfs = pdf_files
-                        st.session_state.pdf_folder = pdf_folder
-                        st.session_state.save_folder = save_folder
-                        
-                        if pdf_files:
-                            st.success(f"✅ Found {len(pdf_files)} PDF file(s) in {pdf_folder}")
+                    # Process uploaded files
+                    if st.button("🔄 Process Uploaded Files", key="process_uploads", use_container_width=True):
+                        with st.spinner("Saving uploaded files..."):
+                            import tempfile
+                            temp_dir = tempfile.mkdtemp()
+                            pdf_paths = []
                             
-                            # Show preview of found files
-                            with st.expander("📄 View Found PDFs", expanded=True):
-                                for i, pdf in enumerate(pdf_files[:10], 1):  # Show first 10
-                                    st.markdown(f"**{i}.** `{pdf.name}` ({pdf.parent})")
-                                if len(pdf_files) > 10:
-                                    st.markdown(f"*... and {len(pdf_files) - 10} more files*")
-                        else:
-                            st.error(f"❌ No PDF files found in {pdf_folder}")
-                            st.info("💡 Make sure your folder contains .pdf files")
-                else:
-                    st.error(f"❌ Folder does not exist: {pdf_folder}")
-                    st.info("💡 Please check the folder path and try again")
+                            try:
+                                for uploaded_file in uploaded_files:
+                                    # Save uploaded file to temporary location
+                                    temp_path = os.path.join(temp_dir, uploaded_file.name)
+                                    with open(temp_path, 'wb') as f:
+                                        f.write(uploaded_file.getbuffer())
+                                    pdf_paths.append(Path(temp_path))
+                                
+                                st.session_state.found_pdfs = pdf_paths
+                                st.session_state.pdf_folder = temp_dir
+                                st.session_state.save_folder = save_folder
+                                st.session_state.uploaded_files = uploaded_files
+                                
+                                st.success(f"✅ {len(pdf_paths)} file(s) ready for processing!")
+                                
+                            except Exception as e:
+                                st.error(f"❌ Error processing files: {e}")
+
+            else:  # Use Server Folder
+                st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+
+                # Get current directory and list available folders
+                current_dir = os.getcwd()
+                
+                # Get list of directories in workspace
+                available_folders = ["Data"]  # Default folder
+                try:
+                    for item in os.listdir(current_dir):
+                        full_path = os.path.join(current_dir, item)
+                        if os.path.isdir(full_path) and not item.startswith('.') and item not in ['vector_databases', 'vector_databases_azhar', '__pycache__', 'assets']:
+                            if item not in available_folders:
+                                available_folders.append(item)
+                except:
+                    pass
+
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    # Folder selection dropdown
+                    selected_folder = st.selectbox(
+                        "📁 Select Folder",
+                        available_folders,
+                        help="Choose a folder from the server"
+                    )
+                    
+                    # Option to enter custom path
+                    use_custom = st.checkbox("Use custom folder path", key="use_custom_path")
+                    
+                    if use_custom:
+                        pdf_folder = st.text_input(
+                            "Custom Folder Path",
+                            value=selected_folder,
+                            placeholder="/path/to/your/pdfs",
+                            help="Enter the full path to your PDF folder"
+                        )
+                    else:
+                        pdf_folder = selected_folder
+
+                with col2:
+                    save_folder = st.text_input(
+                        "💾 Database Save Location",
+                        value="vector_databases",
+                        help="Where to save the vector database"
+                    )
+
+                st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
+
+                if st.button("🔍 Scan Selected Folder", key="check_pdfs", use_container_width=True):
+                    if os.path.exists(pdf_folder):
+                        with st.spinner(f"Scanning {pdf_folder} for PDF files..."):
+                            pdf_files = get_all_pdfs(pdf_folder)
+                            st.session_state.found_pdfs = pdf_files
+                            st.session_state.pdf_folder = pdf_folder
+                            st.session_state.save_folder = save_folder
+                            
+                            if pdf_files:
+                                st.success(f"✅ Found {len(pdf_files)} PDF file(s) in {pdf_folder}")
+                                
+                                # Show preview of found files
+                                with st.expander("📄 View Found PDFs", expanded=True):
+                                    for i, pdf in enumerate(pdf_files[:10], 1):  # Show first 10
+                                        st.markdown(f"**{i}.** `{pdf.name}` ({pdf.parent})")
+                                    if len(pdf_files) > 10:
+                                        st.markdown(f"*... and {len(pdf_files) - 10} more files*")
+                            else:
+                                st.error(f"❌ No PDF files found in {pdf_folder}")
+                                st.info("💡 Make sure your folder contains .pdf files")
+                    else:
+                        st.error(f"❌ Folder does not exist: {pdf_folder}")
+                        st.info("💡 Please check the folder path and try again")
 
             # Show create button if PDFs are found
             if st.session_state.found_pdfs:
