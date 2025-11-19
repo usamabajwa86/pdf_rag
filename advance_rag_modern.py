@@ -982,7 +982,7 @@ with tab2:
                             st.markdown(f"**{i}.** `{uploaded_file.name}` ({file_size:.1f} KB)")
 
                     # Process uploaded files
-                    if st.button("🔄 Process Uploaded Files", key="process_uploads", use_container_width=True):
+                    if st.button("🔄 Process Uploaded Files", key="process_uploads", width="stretch"):
                         with st.spinner("Saving uploaded files..."):
                             import tempfile
                             temp_dir = tempfile.mkdtemp()
@@ -1055,7 +1055,7 @@ with tab2:
 
                 st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
 
-                if st.button("🔍 Scan Selected Folder", key="check_pdfs", use_container_width=True):
+                if st.button("🔍 Scan Selected Folder", key="check_pdfs", width="stretch"):
                     if os.path.exists(pdf_folder):
                         with st.spinner(f"Scanning {pdf_folder} for PDF files..."):
                             pdf_files = get_all_pdfs(pdf_folder)
@@ -1095,7 +1095,7 @@ with tab2:
                 </div>
                 """, unsafe_allow_html=True)
 
-                if st.button("🚀 Create Vector Database", key="create_db", use_container_width=True):
+                if st.button("🚀 Create Vector Database", key="create_db", width="stretch"):
                     result = create_new_database(
                         st.session_state.found_pdfs,
                         st.session_state.save_folder
