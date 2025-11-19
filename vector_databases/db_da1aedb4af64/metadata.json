@@ -1,0 +1,12 @@
+{
+  "created_at": "2025-11-18 23:55:11",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "chunk_size": 1000,
+  "chunk_overlap": 200,
+  "total_pdfs": 1,
+  "total_chunks": 2281,
+  "pdf_files": [
+    "D:\\Documents\\eRAN18.0 FDD Feature Documentation_20251118 123739.pdf"
+  ],
+  "config_hash": "da1aedb4af64"
+}

@@ -1,1 +1,44 @@
+# Virtual Environment
+.venv/
+venv/
+env/
 
+# Data folder with PDFs
+Data/
+
+# Exclude other vector databases, keep only db_da1aedb4af64
+vector_databases/db_035ba360ee74/
+vector_databases/db_1949ed544d40/
+vector_databases/db_5adb8c15a9bf/
+vector_databases/db_c4e45bdd4015/
+
+# Test files
+test.ipynb
+test.pdf
+test1.pdf
+
+# Claude files
+.claude/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
