@@ -744,7 +744,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Ultra Modern CSS with Complete Redesign
+# Ultra Modern CSS with Complete Redesign - Dark/Light Theme Support
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -754,7 +754,12 @@ st.markdown("""
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* Dark Modern Background */
+    /* Adaptive Background - Works for both light and dark themes */
+    .stApp[data-theme="light"] {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+    }
+    
+    .stApp[data-theme="dark"],
     .stApp {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
     }
@@ -771,14 +776,19 @@ st.markdown("""
 
     /* Modern Header Bar */
     .top-bar {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(20px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(99, 102, 241, 0.2);
         padding: 1.5rem 3rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 2rem;
+    }
+    
+    [data-theme="light"] .top-bar {
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 1px solid rgba(99, 102, 241, 0.3);
     }
 
     .logo-section {
@@ -796,10 +806,14 @@ st.markdown("""
     }
 
     .logo-text {
-        color: white;
+        color: #1e293b;
         font-size: 1.75rem;
         font-weight: 700;
         letter-spacing: -0.5px;
+    }
+    
+    [data-theme="dark"] .logo-text {
+        color: white;
     }
 
     .status-badge {
@@ -823,29 +837,39 @@ st.markdown("""
 
     /* Modern Cards */
     .modern-card {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
         border-radius: 24px;
         padding: 2.5rem;
         margin-bottom: 2rem;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     }
+    
+    [data-theme="light"] .modern-card {
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        box-shadow: 0 8px 30px rgba(99, 102, 241, 0.15);
+    }
 
     .modern-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(99, 102, 241, 0.5);
-        box-shadow: 0 30px 80px rgba(99, 102, 241, 0.2);
+        border-color: rgba(99, 102, 241, 0.6);
+        box-shadow: 0 30px 80px rgba(99, 102, 241, 0.25);
     }
 
     .card-title {
-        color: white;
+        color: #1e293b;
         font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
         gap: 0.75rem;
+    }
+    
+    [data-theme="dark"] .card-title {
+        color: white;
     }
 
     .card-title-icon {
@@ -854,12 +878,17 @@ st.markdown("""
 
     /* Glassmorphism Panels */
     .glass-panel {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(99, 102, 241, 0.2);
         border-radius: 16px;
         padding: 1.5rem;
         margin-bottom: 1.5rem;
+    }
+    
+    [data-theme="light"] .glass-panel {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(99, 102, 241, 0.25);
     }
 
     /* Modern Tabs */
@@ -891,13 +920,48 @@ st.markdown("""
         color: white !important;
     }
 
-    /* Text Colors */
-    p, span, div, label {
+    /* Text Colors - Adaptive */
+    [data-theme="dark"] p,
+    [data-theme="dark"] span,
+    [data-theme="dark"] div,
+    [data-theme="dark"] label {
         color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    [data-theme="light"] p,
+    [data-theme="light"] span,
+    [data-theme="light"] div,
+    [data-theme="light"] label {
+        color: rgba(30, 41, 59, 0.95) !important;
+    }
+
+    [data-theme="dark"] h1,
+    [data-theme="dark"] h2,
+    [data-theme="dark"] h3,
+    [data-theme="dark"] h4,
+    [data-theme="dark"] h5,
+    [data-theme="dark"] h6 {
+        color: white !important;
+        font-weight: 700;
+    }
+    
+    [data-theme="light"] h1,
+    [data-theme="light"] h2,
+    [data-theme="light"] h3,
+    [data-theme="light"] h4,
+    [data-theme="light"] h5,
+    [data-theme="light"] h6 {
+        color: #1e293b !important;
+        font-weight: 700;
+    }
+    
+    /* Default (when theme not detected) */
+    p, span, div, label {
+        color: rgba(30, 41, 59, 0.95) !important;
     }
 
     h1, h2, h3, h4, h5, h6 {
-        color: white !important;
+        color: #1e293b !important;
         font-weight: 700;
     }
 
@@ -923,11 +987,25 @@ st.markdown("""
     /* Input Fields */
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(99, 102, 241, 0.3) !important;
         border-radius: 12px !important;
-        color: white !important;
+        color: #1e293b !important;
         padding: 0.875rem 1rem !important;
+    }
+    
+    [data-theme="dark"] .stTextInput > div > div > input,
+    [data-theme="dark"] .stTextArea > div > div > textarea {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(99, 102, 241, 0.3) !important;
+        color: white !important;
+    }
+    
+    [data-theme="light"] .stTextInput > div > div > input,
+    [data-theme="light"] .stTextArea > div > div > textarea {
+        background: white !important;
+        border: 1px solid rgba(99, 102, 241, 0.4) !important;
+        color: #1e293b !important;
     }
 
     .stTextInput > div > div > input:focus,
@@ -938,22 +1016,38 @@ st.markdown("""
 
     .stTextInput > div > div > input::placeholder,
     .stTextArea > div > div > textarea::placeholder {
-        color: rgba(255, 255, 255, 0.4) !important;
+        color: rgba(99, 102, 241, 0.5) !important;
     }
 
     /* Select & Radio */
     .stSelectbox > div > div,
     .stRadio > div {
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(99, 102, 241, 0.3) !important;
         border-radius: 12px !important;
+        color: #1e293b !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox > div > div,
+    [data-theme="dark"] .stRadio > div {
         color: white !important;
+    }
+    
+    [data-theme="light"] .stSelectbox > div > div,
+    [data-theme="light"] .stRadio > div {
+        background: white !important;
+        color: #1e293b !important;
     }
 
     .stSelectbox label,
     .stRadio label {
-        color: rgba(255, 255, 255, 0.9) !important;
+        color: #1e293b !important;
         font-weight: 500;
+    }
+    
+    [data-theme="dark"] .stSelectbox label,
+    [data-theme="dark"] .stRadio label {
+        color: rgba(255, 255, 255, 0.9) !important;
     }
 
     /* Metrics */
@@ -987,32 +1081,52 @@ st.markdown("""
 
     /* Chat Messages */
     .stChatMessage {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
         border-radius: 16px;
         padding: 1.5rem;
         margin: 1rem 0;
     }
+    
+    [data-theme="light"] .stChatMessage {
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+    }
 
-    .stChatMessage p,
-    .stChatMessage div,
-    .stChatMessage span {
+    [data-theme="dark"] .stChatMessage p,
+    [data-theme="dark"] .stChatMessage div,
+    [data-theme="dark"] .stChatMessage span {
         color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    [data-theme="light"] .stChatMessage p,
+    [data-theme="light"] .stChatMessage div,
+    [data-theme="light"] .stChatMessage span {
+        color: rgba(30, 41, 59, 0.95) !important;
     }
 
     /* Chat Input */
     [data-testid="stChatInput"] {
-        background: rgba(255, 255, 255, 0.05) !important;
+        background: rgba(255, 255, 255, 0.08) !important;
         backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border: 1px solid rgba(99, 102, 241, 0.3) !important;
         border-radius: 16px !important;
+    }
+    
+    [data-theme="light"] [data-testid="stChatInput"] {
+        background: white !important;
+        border: 1px solid rgba(99, 102, 241, 0.4) !important;
     }
 
     [data-testid="stChatInput"] input {
         background: transparent !important;
-        color: white !important;
+        color: #1e293b !important;
         border: none !important;
+    }
+    
+    [data-theme="dark"] [data-testid="stChatInput"] input {
+        color: white !important;
     }
 
     /* Success/Info/Warning Boxes */
@@ -1105,16 +1219,26 @@ st.markdown("""
 
     /* Answer Content */
     .answer-content {
-        color: rgba(255, 255, 255, 0.9) !important;
+        color: #1e293b !important;
         line-height: 1.8;
+    }
+    
+    [data-theme="dark"] .answer-content {
+        color: rgba(255, 255, 255, 0.9) !important;
     }
 
     .answer-content h1,
     .answer-content h2,
     .answer-content h3 {
-        color: #a78bfa !important;
+        color: #6366f1 !important;
         margin-top: 2rem;
         margin-bottom: 1rem;
+    }
+    
+    [data-theme="dark"] .answer-content h1,
+    [data-theme="dark"] .answer-content h2,
+    [data-theme="dark"] .answer-content h3 {
+        color: #a78bfa !important;
     }
 
     .answer-content table {
@@ -1125,15 +1249,25 @@ st.markdown("""
 
     .answer-content th,
     .answer-content td {
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.3);
         padding: 0.875rem 1rem;
         text-align: left;
+        color: #1e293b !important;
+    }
+    
+    [data-theme="dark"] .answer-content th,
+    [data-theme="dark"] .answer-content td {
+        border: 1px solid rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.9) !important;
     }
 
     .answer-content th {
         background: rgba(99, 102, 241, 0.2);
         font-weight: 600;
+        color: #1e293b !important;
+    }
+    
+    [data-theme="dark"] .answer-content th {
         color: white !important;
     }
 
@@ -1145,6 +1279,10 @@ st.markdown("""
 
     .answer-content li {
         margin: 0.5rem 0;
+        color: #1e293b !important;
+    }
+    
+    [data-theme="dark"] .answer-content li {
         color: rgba(255, 255, 255, 0.9) !important;
     }
 
@@ -1211,12 +1349,12 @@ with tab1:
         with col1:
             st.markdown("""
             <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">📊 Database Details</h4>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <h4 style="margin-bottom: 1rem;">📊 Database Details</h4>
+                <p style="margin: 0.5rem 0; opacity: 0.85;">
                     <strong>Embedding Model:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <p style="margin: 0.5rem 0; opacity: 0.85;">
                     <strong>Created:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <p style="margin: 0.5rem 0; opacity: 0.85;">
                     <strong>Chunk Size:</strong> {} tokens</p>
             </div>
             """.format(
@@ -1228,12 +1366,12 @@ with tab1:
         with col2:
             st.markdown("""
             <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">🤖 AI Configuration</h4>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <h4 style="margin-bottom: 1rem;">🤖 AI Configuration</h4>
+                <p style="margin: 0.5rem 0;">
                     <strong>Provider:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <p style="margin: 0.5rem 0;">
                     <strong>Model:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
+                <p style="margin: 0.5rem 0;">
                     <strong>Status:</strong> <span style="color: #10b981;">● Active</span></p>
             </div>
             """.format(
@@ -1244,8 +1382,8 @@ with tab1:
     else:
         st.markdown("""
         <div class="modern-card">
-            <h3 style="color: white; text-align: center; margin-bottom: 1rem;">Welcome to RAG Intelligence Hub</h3>
-            <p style="color: rgba(255,255,255,0.7); text-align: center; font-size: 1.1rem;">
+            <h3 style="text-align: center; margin-bottom: 1rem;">Welcome to RAG Intelligence Hub</h3>
+            <p style="text-align: center; font-size: 1.1rem; opacity: 0.8;">
                 Please configure your database and AI model in the Configuration tab to get started.
             </p>
         </div>
@@ -1320,7 +1458,7 @@ with tab2:
                     st.markdown("""
                     <div class="glass-panel" style="background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3);">
                         <h4 style="color: #a855f7; margin-bottom: 0.5rem;">➕ Add Files to Existing Database</h4>
-                        <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0;">
+                        <p style="margin: 0.5rem 0; opacity: 0.9;">
                             Upload new files to add to the selected database
                         </p>
                     </div>
@@ -1401,8 +1539,8 @@ with tab2:
 
             st.markdown("""
             <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">📂 Select Document Source</h4>
-                <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
+                <h4 style="margin-bottom: 1rem;">📂 Select Document Source</h4>
+                <p style="margin-bottom: 1rem; opacity: 0.8;">
                     Choose how to provide your documents (PDF, Word, Excel, Images, Audio, Video, etc.)
                 </p>
             </div>
@@ -1421,11 +1559,11 @@ with tab2:
                 
                 st.markdown("""
                 <div class="glass-panel" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3);">
-                    <h4 style="color: #a78bfa; margin-bottom: 0.5rem;">📤 Upload Your Documents</h4>
-                    <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0;">
+                    <h4 style="color: #6366f1; margin-bottom: 0.5rem;">📤 Upload Your Documents</h4>
+                    <p style="margin: 0.5rem 0; opacity: 0.9;">
                         Drag and drop files below or click to browse
                     </p>
-                    <p style="color: rgba(255,255,255,0.6); margin: 0; font-size: 0.9rem;">
+                    <p style="margin: 0; font-size: 0.9rem; opacity: 0.75;">
                         Supported: PDF, Word, Excel, PowerPoint, Images, Audio, Video, Text, Markdown
                     </p>
                 </div>
@@ -1576,10 +1714,10 @@ with tab2:
                 st.markdown(f"""
                 <div class="glass-panel" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
                     <h4 style="color: #10b981; margin-bottom: 0.5rem;">✅ Ready to Process</h4>
-                    <p style="color: rgba(255,255,255,0.8); margin: 0;">
+                    <p style="margin: 0; opacity: 0.9;">
                         <strong>{len(st.session_state.found_pdfs)} files</strong> will be processed from <strong>{st.session_state.pdf_folder}</strong>
                     </p>
-                    <p style="color: rgba(255,255,255,0.6); margin: 0.5rem 0 0 0; font-size: 0.9rem;">
+                    <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.75;">
                         File types: {type_summary}
                     </p>
                 </div>
@@ -1658,8 +1796,8 @@ with tab3:
     if not st.session_state.database_loaded or not st.session_state.llm_configured:
         st.markdown("""
         <div class="modern-card">
-            <h3 style="color: white; text-align: center;">⚠️ Configuration Required</h3>
-            <p style="color: rgba(255,255,255,0.7); text-align: center; margin-top: 1rem;">
+            <h3 style="text-align: center;">⚠️ Configuration Required</h3>
+            <p style="text-align: center; margin-top: 1rem; opacity: 0.8;">
                 Please configure your database and AI model in the Configuration tab before starting a chat.
             </p>
         </div>
