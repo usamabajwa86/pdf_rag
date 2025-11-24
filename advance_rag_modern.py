@@ -744,7 +744,35 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Initialize theme in session state
+if 'app_theme' not in st.session_state:
+    st.session_state.app_theme = 'dark'
+
+# Theme selector in sidebar
+with st.sidebar:
+    st.markdown("### 🎨 Theme")
+    theme_choice = st.radio(
+        "Select Theme",
+        ["🌙 Dark", "☀️ Light"],
+        index=0 if st.session_state.app_theme == 'dark' else 1,
+        key="theme_selector"
+    )
+    st.session_state.app_theme = 'dark' if theme_choice == "🌙 Dark" else 'light'
+
 # Ultra Modern CSS with Complete Redesign - Dark/Light Theme Support
+theme_class = "theme-light" if st.session_state.app_theme == 'light' else "theme-dark"
+
+# Apply theme via JavaScript
+st.markdown(f"""
+<script>
+    // Apply theme class to root element
+    const root = document.documentElement;
+    root.classList.remove('theme-dark', 'theme-light');
+    root.classList.add('{theme_class}');
+</script>
+""", unsafe_allow_html=True)
+
+# CSS Styles
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
@@ -754,14 +782,15 @@ st.markdown("""
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* Adaptive Background - Works for both light and dark themes */
-    .stApp[data-theme="light"] {
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+    /* Light Theme Background */
+    html.theme-light .stApp {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
     }
     
-    .stApp[data-theme="dark"],
+    /* Dark Theme Background (Default) */
+    html.theme-dark .stApp,
     .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%) !important;
     }
 
     .main {
@@ -775,6 +804,7 @@ st.markdown("""
     }
 
     /* Modern Header Bar */
+    html.theme-dark .top-bar,
     .top-bar {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(20px);
@@ -786,7 +816,7 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     
-    [data-theme="light"] .top-bar {
+    html.theme-light .top-bar {
         background: rgba(255, 255, 255, 0.95);
         border-bottom: 1px solid rgba(99, 102, 241, 0.3);
     }
@@ -805,15 +835,16 @@ st.markdown("""
         background-clip: text;
     }
 
+    html.theme-dark .logo-text,
     .logo-text {
-        color: #1e293b;
+        color: white;
         font-size: 1.75rem;
         font-weight: 700;
         letter-spacing: -0.5px;
     }
     
-    [data-theme="dark"] .logo-text {
-        color: white;
+    html.theme-light .logo-text {
+        color: #1e293b;
     }
 
     .status-badge {
@@ -836,6 +867,7 @@ st.markdown("""
     }
 
     /* Modern Cards */
+    html.theme-dark .modern-card,
     .modern-card {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(20px);
@@ -846,7 +878,7 @@ st.markdown("""
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     }
     
-    [data-theme="light"] .modern-card {
+    html.theme-light .modern-card {
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid rgba(99, 102, 241, 0.3);
         box-shadow: 0 8px 30px rgba(99, 102, 241, 0.15);
@@ -858,8 +890,9 @@ st.markdown("""
         box-shadow: 0 30px 80px rgba(99, 102, 241, 0.25);
     }
 
+    html.theme-dark .card-title,
     .card-title {
-        color: #1e293b;
+        color: white;
         font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 1.5rem;
@@ -868,8 +901,8 @@ st.markdown("""
         gap: 0.75rem;
     }
     
-    [data-theme="dark"] .card-title {
-        color: white;
+    html.theme-light .card-title {
+        color: #1e293b;
     }
 
     .card-title-icon {
@@ -877,6 +910,7 @@ st.markdown("""
     }
 
     /* Glassmorphism Panels */
+    html.theme-dark .glass-panel,
     .glass-panel {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(10px);
@@ -886,7 +920,7 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
     
-    [data-theme="light"] .glass-panel {
+    html.theme-light .glass-panel {
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(99, 102, 241, 0.25);
     }
@@ -921,46 +955,38 @@ st.markdown("""
     }
 
     /* Text Colors - Adaptive */
-    [data-theme="dark"] p,
-    [data-theme="dark"] span,
-    [data-theme="dark"] div,
-    [data-theme="dark"] label {
+    html.theme-dark p,
+    html.theme-dark span:not(.status-badge span),
+    html.theme-dark div:not(.logo-icon):not(.status-badge),
+    html.theme-dark label,
+    p, span, div, label {
         color: rgba(255, 255, 255, 0.9) !important;
     }
     
-    [data-theme="light"] p,
-    [data-theme="light"] span,
-    [data-theme="light"] div,
-    [data-theme="light"] label {
+    html.theme-light p,
+    html.theme-light span:not(.status-badge span),
+    html.theme-light div:not(.logo-icon):not(.status-badge),
+    html.theme-light label {
         color: rgba(30, 41, 59, 0.95) !important;
     }
 
-    [data-theme="dark"] h1,
-    [data-theme="dark"] h2,
-    [data-theme="dark"] h3,
-    [data-theme="dark"] h4,
-    [data-theme="dark"] h5,
-    [data-theme="dark"] h6 {
+    html.theme-dark h1,
+    html.theme-dark h2,
+    html.theme-dark h3,
+    html.theme-dark h4,
+    html.theme-dark h5,
+    html.theme-dark h6,
+    h1, h2, h3, h4, h5, h6 {
         color: white !important;
         font-weight: 700;
     }
     
-    [data-theme="light"] h1,
-    [data-theme="light"] h2,
-    [data-theme="light"] h3,
-    [data-theme="light"] h4,
-    [data-theme="light"] h5,
-    [data-theme="light"] h6 {
-        color: #1e293b !important;
-        font-weight: 700;
-    }
-    
-    /* Default (when theme not detected) */
-    p, span, div, label {
-        color: rgba(30, 41, 59, 0.95) !important;
-    }
-
-    h1, h2, h3, h4, h5, h6 {
+    html.theme-light h1,
+    html.theme-light h2,
+    html.theme-light h3,
+    html.theme-light h4,
+    html.theme-light h5,
+    html.theme-light h6 {
         color: #1e293b !important;
         font-weight: 700;
     }
@@ -985,24 +1011,19 @@ st.markdown("""
     }
 
     /* Input Fields */
+    .theme-dark .stTextInput > div > div > input,
+    .theme-dark .stTextArea > div > div > textarea,
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea {
         background: rgba(255, 255, 255, 0.08) !important;
         border: 1px solid rgba(99, 102, 241, 0.3) !important;
         border-radius: 12px !important;
-        color: #1e293b !important;
+        color: white !important;
         padding: 0.875rem 1rem !important;
     }
     
-    [data-theme="dark"] .stTextInput > div > div > input,
-    [data-theme="dark"] .stTextArea > div > div > textarea {
-        background: rgba(255, 255, 255, 0.08) !important;
-        border: 1px solid rgba(99, 102, 241, 0.3) !important;
-        color: white !important;
-    }
-    
-    [data-theme="light"] .stTextInput > div > div > input,
-    [data-theme="light"] .stTextArea > div > div > textarea {
+    .theme-light .stTextInput > div > div > input,
+    .theme-light .stTextArea > div > div > textarea {
         background: white !important;
         border: 1px solid rgba(99, 102, 241, 0.4) !important;
         color: #1e293b !important;
@@ -1020,34 +1041,33 @@ st.markdown("""
     }
 
     /* Select & Radio */
+    .theme-dark .stSelectbox > div > div,
+    .theme-dark .stRadio > div,
     .stSelectbox > div > div,
     .stRadio > div {
         background: rgba(255, 255, 255, 0.08) !important;
         border: 1px solid rgba(99, 102, 241, 0.3) !important;
         border-radius: 12px !important;
-        color: #1e293b !important;
-    }
-    
-    [data-theme="dark"] .stSelectbox > div > div,
-    [data-theme="dark"] .stRadio > div {
         color: white !important;
     }
     
-    [data-theme="light"] .stSelectbox > div > div,
-    [data-theme="light"] .stRadio > div {
+    .theme-light .stSelectbox > div > div,
+    .theme-light .stRadio > div {
         background: white !important;
         color: #1e293b !important;
     }
 
+    .theme-dark .stSelectbox label,
+    .theme-dark .stRadio label,
     .stSelectbox label,
     .stRadio label {
-        color: #1e293b !important;
+        color: rgba(255, 255, 255, 0.9) !important;
         font-weight: 500;
     }
     
-    [data-theme="dark"] .stSelectbox label,
-    [data-theme="dark"] .stRadio label {
-        color: rgba(255, 255, 255, 0.9) !important;
+    .theme-light .stSelectbox label,
+    .theme-light .stRadio label {
+        color: #1e293b !important;
     }
 
     /* Metrics */
@@ -1080,6 +1100,7 @@ st.markdown("""
     }
 
     /* Chat Messages */
+    .theme-dark .stChatMessage,
     .stChatMessage {
         background: rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(10px);
@@ -1089,24 +1110,28 @@ st.markdown("""
         margin: 1rem 0;
     }
     
-    [data-theme="light"] .stChatMessage {
+    .theme-light .stChatMessage {
         background: rgba(255, 255, 255, 0.95);
         border: 1px solid rgba(99, 102, 241, 0.3);
     }
 
-    [data-theme="dark"] .stChatMessage p,
-    [data-theme="dark"] .stChatMessage div,
-    [data-theme="dark"] .stChatMessage span {
+    .theme-dark .stChatMessage p,
+    .theme-dark .stChatMessage div,
+    .theme-dark .stChatMessage span,
+    .stChatMessage p,
+    .stChatMessage div,
+    .stChatMessage span {
         color: rgba(255, 255, 255, 0.9) !important;
     }
     
-    [data-theme="light"] .stChatMessage p,
-    [data-theme="light"] .stChatMessage div,
-    [data-theme="light"] .stChatMessage span {
+    .theme-light .stChatMessage p,
+    .theme-light .stChatMessage div,
+    .theme-light .stChatMessage span {
         color: rgba(30, 41, 59, 0.95) !important;
     }
 
     /* Chat Input */
+    .theme-dark [data-testid="stChatInput"],
     [data-testid="stChatInput"] {
         background: rgba(255, 255, 255, 0.08) !important;
         backdrop-filter: blur(10px);
@@ -1114,19 +1139,20 @@ st.markdown("""
         border-radius: 16px !important;
     }
     
-    [data-theme="light"] [data-testid="stChatInput"] {
+    .theme-light [data-testid="stChatInput"] {
         background: white !important;
         border: 1px solid rgba(99, 102, 241, 0.4) !important;
     }
 
+    .theme-dark [data-testid="stChatInput"] input,
     [data-testid="stChatInput"] input {
         background: transparent !important;
-        color: #1e293b !important;
+        color: white !important;
         border: none !important;
     }
     
-    [data-theme="dark"] [data-testid="stChatInput"] input {
-        color: white !important;
+    .theme-light [data-testid="stChatInput"] input {
+        color: #1e293b !important;
     }
 
     /* Success/Info/Warning Boxes */
@@ -1218,27 +1244,31 @@ st.markdown("""
     }
 
     /* Answer Content */
+    .theme-dark .answer-content,
     .answer-content {
-        color: #1e293b !important;
+        color: rgba(255, 255, 255, 0.9) !important;
         line-height: 1.8;
     }
     
-    [data-theme="dark"] .answer-content {
-        color: rgba(255, 255, 255, 0.9) !important;
+    .theme-light .answer-content {
+        color: #1e293b !important;
     }
 
+    .theme-dark .answer-content h1,
+    .theme-dark .answer-content h2,
+    .theme-dark .answer-content h3,
     .answer-content h1,
     .answer-content h2,
     .answer-content h3 {
-        color: #6366f1 !important;
+        color: #a78bfa !important;
         margin-top: 2rem;
         margin-bottom: 1rem;
     }
     
-    [data-theme="dark"] .answer-content h1,
-    [data-theme="dark"] .answer-content h2,
-    [data-theme="dark"] .answer-content h3 {
-        color: #a78bfa !important;
+    .theme-light .answer-content h1,
+    .theme-light .answer-content h2,
+    .theme-light .answer-content h3 {
+        color: #6366f1 !important;
     }
 
     .answer-content table {
@@ -1247,28 +1277,31 @@ st.markdown("""
         margin: 1.5rem 0;
     }
 
+    .theme-dark .answer-content th,
+    .theme-dark .answer-content td,
     .answer-content th,
     .answer-content td {
-        border: 1px solid rgba(99, 102, 241, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         padding: 0.875rem 1rem;
         text-align: left;
-        color: #1e293b !important;
-    }
-    
-    [data-theme="dark"] .answer-content th,
-    [data-theme="dark"] .answer-content td {
-        border: 1px solid rgba(255, 255, 255, 0.1);
         color: rgba(255, 255, 255, 0.9) !important;
     }
+    
+    .theme-light .answer-content th,
+    .theme-light .answer-content td {
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        color: #1e293b !important;
+    }
 
+    .theme-dark .answer-content th,
     .answer-content th {
         background: rgba(99, 102, 241, 0.2);
         font-weight: 600;
-        color: #1e293b !important;
+        color: white !important;
     }
     
-    [data-theme="dark"] .answer-content th {
-        color: white !important;
+    .theme-light .answer-content th {
+        color: #1e293b !important;
     }
 
     .answer-content ul,
@@ -1277,13 +1310,14 @@ st.markdown("""
         padding-left: 2rem;
     }
 
+    .theme-dark .answer-content li,
     .answer-content li {
         margin: 0.5rem 0;
-        color: #1e293b !important;
+        color: rgba(255, 255, 255, 0.9) !important;
     }
     
-    [data-theme="dark"] .answer-content li {
-        color: rgba(255, 255, 255, 0.9) !important;
+    .theme-light .answer-content li {
+        color: #1e293b !important;
     }
 
     /* Hide Streamlit Branding */
