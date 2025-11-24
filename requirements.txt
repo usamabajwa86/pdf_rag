@@ -17,6 +17,20 @@ sentence-transformers>=5.0.0
 pypdf>=6.0.0
 PyPDF2>=3.0.0
 
+# Word/Office documents
+python-docx>=1.0.0
+openpyxl>=3.1.0
+python-pptx>=0.6.23
+
+# Image processing & OCR
+Pillow>=10.0.0
+pytesseract>=0.3.10
+
+# Audio/Video processing
+openai-whisper>=20231117
+pydub>=0.25.1
+moviepy>=1.0.3
+
 # Search
 rank-bm25>=0.2.2
 
@@ -26,3 +40,6 @@ groq>=0.32.0
 # Standard data processing
 numpy>=1.24.0
 pandas>=2.0.0
+
+# Additional utilities
+requests>=2.31.0

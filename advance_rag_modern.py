@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 import glob
+import tempfile
+import io
 # LangChain imports
 from langchain_groq import ChatGroq
 from langchain_community.llms import Ollama
@@ -19,6 +21,45 @@ from langchain_classic.chains.retrieval import create_retrieval_chain
 from langchain_community.vectorstores import FAISS
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
+from langchain_core.documents import Document
+
+# Multi-format document processing imports
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    DocxDocument = None
+
+try:
+    from openpyxl import load_workbook
+except ImportError:
+    load_workbook = None
+
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
+
+try:
+    from PIL import Image
+    import pytesseract
+except ImportError:
+    Image = None
+    pytesseract = None
+
+try:
+    import whisper
+except ImportError:
+    whisper = None
+
+try:
+    from pydub import AudioSegment
+except ImportError:
+    AudioSegment = None
+
+try:
+    from moviepy.editor import VideoFileClip
+except ImportError:
+    VideoFileClip = None
 
 # Load environment
 load_dotenv()
@@ -107,8 +148,39 @@ def clean_text(text):
     cleaned = text.encode('utf-8', errors='ignore').decode('utf-8').strip()
     return ' '.join(cleaned.split())
 
+# Supported file extensions
+SUPPORTED_EXTENSIONS = {
+    'pdf': ['.pdf'],
+    'word': ['.docx', '.doc'],
+    'excel': ['.xlsx', '.xls'],
+    'powerpoint': ['.pptx', '.ppt'],
+    'text': ['.txt', '.md', '.markdown'],
+    'image': ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif'],
+    'audio': ['.mp3', '.wav', '.m4a', '.flac', '.ogg'],
+    'video': ['.mp4', '.avi', '.mov', '.mkv', '.flv']
+}
+
+def get_all_supported_extensions():
+    """Get flat list of all supported extensions"""
+    return [ext for exts in SUPPORTED_EXTENSIONS.values() for ext in exts]
+
+def get_all_documents(folder_path):
+    """Get all supported documents from specified folder and subfolders"""
+    all_files = []
+    supported_exts = get_all_supported_extensions()
+    
+    for ext in supported_exts:
+        patterns = [
+            os.path.join(folder_path, f"**/*{ext}"),
+            os.path.join(folder_path, f"*{ext}")
+        ]
+        for pattern in patterns:
+            all_files.extend(glob.glob(pattern, recursive=True))
+    
+    return [Path(f) for f in set(all_files) if os.path.exists(f)]
+
 def get_all_pdfs(folder_path):
-    """Get all PDFs from specified folder and subfolders"""
+    """Get all PDFs from specified folder and subfolders (backward compatibility)"""
     pdf_patterns = [
         os.path.join(folder_path, "**/*.pdf"),
         os.path.join(folder_path, "*.pdf")
@@ -117,6 +189,186 @@ def get_all_pdfs(folder_path):
     for pattern in pdf_patterns:
         all_pdfs.extend(glob.glob(pattern, recursive=True))
     return [Path(pdf) for pdf in set(all_pdfs) if os.path.exists(pdf)]
+
+def load_pdf_document(file_path):
+    """Load PDF document"""
+    loader = PyPDFLoader(str(file_path))
+    return loader.load()
+
+def load_word_document(file_path):
+    """Load Word document"""
+    if DocxDocument is None:
+        raise ImportError("python-docx not installed. Run: pip install python-docx")
+    
+    doc = DocxDocument(str(file_path))
+    text_content = []
+    
+    for i, para in enumerate(doc.paragraphs):
+        if para.text.strip():
+            text_content.append(para.text)
+    
+    full_text = '\n\n'.join(text_content)
+    return [Document(
+        page_content=full_text,
+        metadata={'source': str(file_path), 'page': 1}
+    )]
+
+def load_excel_document(file_path):
+    """Load Excel document"""
+    if load_workbook is None:
+        raise ImportError("openpyxl not installed. Run: pip install openpyxl")
+    
+    wb = load_workbook(str(file_path), read_only=True)
+    documents = []
+    
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        rows_text = []
+        
+        for row in sheet.iter_rows(values_only=True):
+            row_text = ' | '.join([str(cell) if cell is not None else '' for cell in row])
+            if row_text.strip():
+                rows_text.append(row_text)
+        
+        if rows_text:
+            sheet_content = '\n'.join(rows_text)
+            documents.append(Document(
+                page_content=sheet_content,
+                metadata={'source': str(file_path), 'sheet': sheet_name, 'page': 1}
+            ))
+    
+    return documents
+
+def load_powerpoint_document(file_path):
+    """Load PowerPoint document"""
+    if Presentation is None:
+        raise ImportError("python-pptx not installed. Run: pip install python-pptx")
+    
+    prs = Presentation(str(file_path))
+    documents = []
+    
+    for i, slide in enumerate(prs.slides):
+        slide_text = []
+        for shape in slide.shapes:
+            if hasattr(shape, "text") and shape.text.strip():
+                slide_text.append(shape.text)
+        
+        if slide_text:
+            documents.append(Document(
+                page_content='\n'.join(slide_text),
+                metadata={'source': str(file_path), 'slide': i + 1, 'page': i + 1}
+            ))
+    
+    return documents
+
+def load_text_document(file_path):
+    """Load text or markdown document"""
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+    
+    return [Document(
+        page_content=content,
+        metadata={'source': str(file_path), 'page': 1}
+    )]
+
+def load_image_document(file_path):
+    """Load image and extract text using OCR"""
+    if Image is None or pytesseract is None:
+        raise ImportError("Pillow or pytesseract not installed. Run: pip install Pillow pytesseract")
+    
+    try:
+        img = Image.open(str(file_path))
+        text = pytesseract.image_to_string(img)
+        
+        return [Document(
+            page_content=text if text.strip() else f"[Image: {file_path.name}]",
+            metadata={'source': str(file_path), 'type': 'image', 'page': 1}
+        )]
+    except Exception as e:
+        return [Document(
+            page_content=f"[Image processing failed: {str(e)}]",
+            metadata={'source': str(file_path), 'type': 'image', 'page': 1}
+        )]
+
+def load_audio_document(file_path):
+    """Load audio and transcribe using Whisper"""
+    if whisper is None:
+        raise ImportError("openai-whisper not installed. Run: pip install openai-whisper")
+    
+    try:
+        model = whisper.load_model("base")
+        result = model.transcribe(str(file_path))
+        
+        return [Document(
+            page_content=result["text"],
+            metadata={'source': str(file_path), 'type': 'audio', 'page': 1}
+        )]
+    except Exception as e:
+        return [Document(
+            page_content=f"[Audio transcription failed: {str(e)}]",
+            metadata={'source': str(file_path), 'type': 'audio', 'page': 1}
+        )]
+
+def load_video_document(file_path):
+    """Load video and extract audio for transcription"""
+    if whisper is None or VideoFileClip is None:
+        raise ImportError("Required libraries not installed. Run: pip install openai-whisper moviepy")
+    
+    try:
+        # Extract audio from video
+        video = VideoFileClip(str(file_path))
+        
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+            temp_audio_path = temp_audio.name
+            video.audio.write_audiofile(temp_audio_path, verbose=False, logger=None)
+        
+        video.close()
+        
+        # Transcribe audio
+        model = whisper.load_model("base")
+        result = model.transcribe(temp_audio_path)
+        
+        # Clean up temp file
+        os.unlink(temp_audio_path)
+        
+        return [Document(
+            page_content=result["text"],
+            metadata={'source': str(file_path), 'type': 'video', 'page': 1}
+        )]
+    except Exception as e:
+        return [Document(
+            page_content=f"[Video transcription failed: {str(e)}]",
+            metadata={'source': str(file_path), 'type': 'video', 'page': 1}
+        )]
+
+def load_document_universal(file_path):
+    """Universal document loader that detects file type and loads accordingly"""
+    file_path = Path(file_path)
+    extension = file_path.suffix.lower()
+    
+    try:
+        if extension == '.pdf':
+            return load_pdf_document(file_path)
+        elif extension in ['.docx', '.doc']:
+            return load_word_document(file_path)
+        elif extension in ['.xlsx', '.xls']:
+            return load_excel_document(file_path)
+        elif extension in ['.pptx', '.ppt']:
+            return load_powerpoint_document(file_path)
+        elif extension in ['.txt', '.md', '.markdown']:
+            return load_text_document(file_path)
+        elif extension in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']:
+            return load_image_document(file_path)
+        elif extension in ['.mp3', '.wav', '.m4a', '.flac', '.ogg']:
+            return load_audio_document(file_path)
+        elif extension in ['.mp4', '.avi', '.mov', '.mkv', '.flv']:
+            return load_video_document(file_path)
+        else:
+            # Try as text file
+            return load_text_document(file_path)
+    except Exception as e:
+        st.warning(f"⚠️ Error loading {file_path.name}: {str(e)}")
+        return []
 
 def scan_folder_for_databases(folder_path):
     """Scan a folder for vector databases"""
@@ -135,8 +387,19 @@ def scan_folder_for_databases(folder_path):
                         try:
                             with open(metadata_path, 'r') as f:
                                 metadata = json.load(f)
+                            
+                            # Support both old (total_pdfs) and new (total_files) format
+                            total_files = metadata.get('total_files', metadata.get('total_pdfs', 0))
+                            file_types = metadata.get('file_types', {})
+                            
+                            if file_types:
+                                type_summary = ', '.join([f"{count} {ftype}" for ftype, count in file_types.items()])
+                                name = f"{metadata.get('embedding_model', 'Unknown')} - {type_summary}"
+                            else:
+                                name = f"{metadata.get('embedding_model', 'Unknown')} - {total_files} files"
+                            
                             databases.append({
-                                'name': f"{metadata.get('embedding_model', 'Unknown')} - {metadata.get('total_pdfs', 0)} PDFs",
+                                'name': name,
                                 'path': vector_db_path,
                                 'metadata': metadata,
                                 'db_folder': item
@@ -181,8 +444,8 @@ def load_existing_database(db_path, db_folder):
         st.error(f"Error loading database: {e}")
         return None
 
-def create_new_database(pdf_files, save_folder):
-    """Create new vector database from PDF files"""
+def create_new_database(file_list, save_folder):
+    """Create new vector database from multiple file types"""
     try:
         embeddings = HuggingFaceEmbeddings(
             model_name=f"sentence-transformers/{EMBEDDING_MODEL}",
@@ -190,30 +453,42 @@ def create_new_database(pdf_files, save_folder):
             encode_kwargs={'normalize_embeddings': True}
         )
 
-        with st.spinner(f"🔄 Processing {len(pdf_files)} PDFs..."):
+        with st.spinner(f"🔄 Processing {len(file_list)} files..."):
             documents = []
             progress_bar = st.progress(0)
+            file_types = {}
 
-            for i, pdf_path in enumerate(pdf_files):
+            for i, file_path in enumerate(file_list):
                 try:
-                    st.text(f"📄 Loading {pdf_path.name} ({i+1}/{len(pdf_files)})...")
-                    loader = PyPDFLoader(str(pdf_path))
-                    pdf_docs = loader.load()
+                    file_ext = file_path.suffix.lower()
+                    file_types[file_ext] = file_types.get(file_ext, 0) + 1
+                    
+                    st.text(f"📄 Loading {file_path.name} ({i+1}/{len(file_list)})...")
+                    
+                    # Use universal loader
+                    loaded_docs = load_document_universal(file_path)
 
                     valid_docs = []
-                    for doc in pdf_docs:
+                    for doc in loaded_docs:
                         cleaned_content = clean_text(doc.page_content)
                         if len(cleaned_content) > 20:
                             doc.page_content = cleaned_content
-                            doc.metadata['source_file'] = pdf_path.name
-                            doc.metadata['full_path'] = str(pdf_path)
+                            if 'source_file' not in doc.metadata:
+                                doc.metadata['source_file'] = file_path.name
+                            if 'full_path' not in doc.metadata:
+                                doc.metadata['full_path'] = str(file_path)
+                            doc.metadata['file_type'] = file_ext
                             valid_docs.append(doc)
 
                     documents.extend(valid_docs)
-                    progress_bar.progress((i + 1) / len(pdf_files))
+                    progress_bar.progress((i + 1) / len(file_list))
 
                 except Exception as e:
-                    st.warning(f"⚠️ Failed to load {pdf_path.name}: {str(e)}")
+                    st.warning(f"⚠️ Failed to load {file_path.name}: {str(e)}")
+
+            if not documents:
+                st.error("❌ No valid documents were loaded!")
+                return None
 
             st.text("✂️ Splitting documents...")
             text_splitter = RecursiveCharacterTextSplitter(
@@ -230,7 +505,7 @@ def create_new_database(pdf_files, save_folder):
             bm25_retriever.k = NUM_RESULTS
 
             st.text("💾 Saving database...")
-            config_str = f"{sorted([str(p) for p in pdf_files])}_{EMBEDDING_MODEL}_{CHUNK_SIZE}_{CHUNK_OVERLAP}"
+            config_str = f"{sorted([str(p) for p in file_list])}_{EMBEDDING_MODEL}_{CHUNK_SIZE}_{CHUNK_OVERLAP}"
             config_hash = hashlib.md5(config_str.encode()).hexdigest()[:12]
 
             os.makedirs(save_folder, exist_ok=True)
@@ -248,13 +523,18 @@ def create_new_database(pdf_files, save_folder):
 
             metadata = {
                 'created_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'updated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
                 'embedding_model': EMBEDDING_MODEL,
                 'chunk_size': CHUNK_SIZE,
                 'chunk_overlap': CHUNK_OVERLAP,
-                'total_pdfs': len(pdf_files),
+                'total_files': len(file_list),
                 'total_chunks': len(final_documents),
-                'pdf_files': [str(p) for p in pdf_files],
-                'config_hash': config_hash
+                'file_types': file_types,
+                'files': [str(p) for p in file_list],
+                'config_hash': config_hash,
+                # Backward compatibility
+                'total_pdfs': file_types.get('.pdf', 0),
+                'pdf_files': [str(p) for p in file_list if p.suffix.lower() == '.pdf']
             }
 
             with open(os.path.join(db_path, "metadata.json"), 'w') as f:
@@ -267,6 +547,112 @@ def create_new_database(pdf_files, save_folder):
 
     except Exception as e:
         st.error(f"❌ Error creating database: {e}")
+        return None
+
+def add_files_to_database(new_files, db_path, db_folder, existing_vector_store, existing_documents, embeddings):
+    """Add new files to an existing database"""
+    try:
+        with st.spinner(f"🔄 Adding {len(new_files)} new files..."):
+            new_documents = []
+            progress_bar = st.progress(0)
+            
+            # Load existing metadata
+            metadata_path = os.path.join(db_path, db_folder, "metadata.json")
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            
+            existing_files = set(metadata.get('files', metadata.get('pdf_files', [])))
+            file_types = metadata.get('file_types', {})
+
+            for i, file_path in enumerate(new_files):
+                try:
+                    # Skip if file already in database
+                    if str(file_path) in existing_files:
+                        st.info(f"⏭️ Skipping {file_path.name} (already in database)")
+                        progress_bar.progress((i + 1) / len(new_files))
+                        continue
+                    
+                    file_ext = file_path.suffix.lower()
+                    file_types[file_ext] = file_types.get(file_ext, 0) + 1
+                    
+                    st.text(f"📄 Loading {file_path.name} ({i+1}/{len(new_files)})...")
+                    
+                    # Use universal loader
+                    loaded_docs = load_document_universal(file_path)
+
+                    valid_docs = []
+                    for doc in loaded_docs:
+                        cleaned_content = clean_text(doc.page_content)
+                        if len(cleaned_content) > 20:
+                            doc.page_content = cleaned_content
+                            if 'source_file' not in doc.metadata:
+                                doc.metadata['source_file'] = file_path.name
+                            if 'full_path' not in doc.metadata:
+                                doc.metadata['full_path'] = str(file_path)
+                            doc.metadata['file_type'] = file_ext
+                            valid_docs.append(doc)
+
+                    new_documents.extend(valid_docs)
+                    existing_files.add(str(file_path))
+                    progress_bar.progress((i + 1) / len(new_files))
+
+                except Exception as e:
+                    st.warning(f"⚠️ Failed to load {file_path.name}: {str(e)}")
+
+            if not new_documents:
+                st.warning("⚠️ No new documents to add!")
+                return None
+
+            st.text("✂️ Splitting new documents...")
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
+            final_new_documents = text_splitter.split_documents(new_documents)
+
+            st.text("🔢 Updating vector database...")
+            # Add new documents to existing vector store
+            existing_vector_store.add_documents(final_new_documents)
+
+            st.text("🔍 Updating keyword index...")
+            # Combine all documents
+            all_documents = existing_documents + final_new_documents
+            bm25_retriever = BM25Retriever.from_documents(all_documents)
+            bm25_retriever.k = NUM_RESULTS
+
+            st.text("💾 Saving updated database...")
+            base_path = os.path.join(db_path, db_folder)
+            
+            existing_vector_store.save_local(os.path.join(base_path, "faiss_index"))
+
+            with open(os.path.join(base_path, "bm25_retriever.pkl"), 'wb') as f:
+                pickle.dump(bm25_retriever, f)
+
+            with open(os.path.join(base_path, "documents.pkl"), 'wb') as f:
+                pickle.dump(all_documents, f)
+
+            # Update metadata
+            metadata.update({
+                'updated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'total_files': len(existing_files),
+                'total_chunks': len(all_documents),
+                'file_types': file_types,
+                'files': list(existing_files),
+                # Backward compatibility
+                'total_pdfs': file_types.get('.pdf', 0),
+                'pdf_files': [f for f in existing_files if f.endswith('.pdf')]
+            })
+
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+
+            progress_bar.progress(1.0)
+            st.success(f"✅ Added {len(final_new_documents)} new chunks from {len(new_documents)} documents!")
+
+            return existing_vector_store, bm25_retriever, all_documents, embeddings, metadata
+
+    except Exception as e:
+        st.error(f"❌ Error adding files to database: {e}")
         return None
 
 def process_answer_with_citations(answer, context_docs):
@@ -905,26 +1291,109 @@ with tab2:
                     format_func=lambda x: st.session_state.scanned_databases[x]['name']
                 )
 
-                if st.button("🚀 Load Database", key="load_db"):
-                    with st.spinner("Loading database..."):
-                        db_info = st.session_state.scanned_databases[selected_db]
-                        result = load_existing_database(db_info['path'], db_info['db_folder'])
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🚀 Load Database", key="load_db", use_container_width=True):
+                        with st.spinner("Loading database..."):
+                            db_info = st.session_state.scanned_databases[selected_db]
+                            result = load_existing_database(db_info['path'], db_info['db_folder'])
 
-                        if result:
-                            vector_store, bm25_retriever, documents, embeddings, metadata = result
-                            st.session_state.vector_store = vector_store
-                            st.session_state.bm25_retriever = bm25_retriever
-                            st.session_state.documents = documents
-                            st.session_state.embeddings = embeddings
-                            st.session_state.metadata = metadata
-                            st.session_state.database_loaded = True
-                            st.success("✅ Database loaded successfully! Switch to AI Model tab to configure.")
-                            st.balloons()
+                            if result:
+                                vector_store, bm25_retriever, documents, embeddings, metadata = result
+                                st.session_state.vector_store = vector_store
+                                st.session_state.bm25_retriever = bm25_retriever
+                                st.session_state.documents = documents
+                                st.session_state.embeddings = embeddings
+                                st.session_state.metadata = metadata
+                                st.session_state.database_loaded = True
+                                st.session_state.current_db_info = db_info
+                                st.success("✅ Database loaded successfully! Switch to AI Model tab to configure.")
+                                st.balloons()
+                
+                with col2:
+                    if st.button("➕ Add Files to Database", key="add_to_db_btn", use_container_width=True):
+                        st.session_state.show_add_files = True
+                
+                # Show add files interface
+                if st.session_state.get('show_add_files', False):
+                    st.markdown('<div style="margin-top: 2rem;"></div>', unsafe_allow_html=True)
+                    st.markdown("""
+                    <div class="glass-panel" style="background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3);">
+                        <h4 style="color: #a855f7; margin-bottom: 0.5rem;">➕ Add Files to Existing Database</h4>
+                        <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0;">
+                            Upload new files to add to the selected database
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    add_files = st.file_uploader(
+                        "Choose files to add",
+                        type=['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'md', 'markdown',
+                              'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'gif',
+                              'mp3', 'wav', 'm4a', 'flac', 'ogg',
+                              'mp4', 'avi', 'mov', 'mkv', 'flv'],
+                        accept_multiple_files=True,
+                        key="add_files_uploader"
+                    )
+                    
+                    if add_files:
+                        st.markdown(f"**{len(add_files)} file(s) selected**")
+                        
+                        if st.button("🚀 Add Files to Database", key="add_files_process"):
+                            # First load the database if not loaded
+                            if not st.session_state.database_loaded:
+                                with st.spinner("Loading database first..."):
+                                    db_info = st.session_state.scanned_databases[selected_db]
+                                    result = load_existing_database(db_info['path'], db_info['db_folder'])
+                                    if result:
+                                        vector_store, bm25_retriever, documents, embeddings, metadata = result
+                                        st.session_state.vector_store = vector_store
+                                        st.session_state.bm25_retriever = bm25_retriever
+                                        st.session_state.documents = documents
+                                        st.session_state.embeddings = embeddings
+                                        st.session_state.metadata = metadata
+                                        st.session_state.current_db_info = db_info
+                            
+                            # Save uploaded files temporarily and add to database
+                            with st.spinner("Processing files..."):
+                                temp_dir = tempfile.mkdtemp()
+                                file_paths = []
+                                
+                                try:
+                                    for add_file in add_files:
+                                        temp_path = os.path.join(temp_dir, add_file.name)
+                                        with open(temp_path, 'wb') as f:
+                                            f.write(add_file.getbuffer())
+                                        file_paths.append(Path(temp_path))
+                                    
+                                    db_info = st.session_state.current_db_info
+                                    result = add_files_to_database(
+                                        file_paths,
+                                        db_info['path'],
+                                        db_info['db_folder'],
+                                        st.session_state.vector_store,
+                                        st.session_state.documents,
+                                        st.session_state.embeddings
+                                    )
+                                    
+                                    if result:
+                                        vector_store, bm25_retriever, documents, embeddings, metadata = result
+                                        st.session_state.vector_store = vector_store
+                                        st.session_state.bm25_retriever = bm25_retriever
+                                        st.session_state.documents = documents
+                                        st.session_state.metadata = metadata
+                                        st.success("✅ Files added successfully!")
+                                        st.session_state.show_add_files = False
+                                        st.balloons()
+                                        st.rerun()
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ Error adding files: {e}")
 
         else:  # Create New Database
             st.markdown('<div style="margin-top: 2rem;"></div>', unsafe_allow_html=True)
 
-            # Initialize session state for PDFs
+            # Initialize session state for files
             if 'found_pdfs' not in st.session_state:
                 st.session_state.found_pdfs = []
             if 'uploaded_files' not in st.session_state:
@@ -932,16 +1401,16 @@ with tab2:
 
             st.markdown("""
             <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">📂 Select PDF Source</h4>
+                <h4 style="color: white; margin-bottom: 1rem;">📂 Select Document Source</h4>
                 <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
-                    Choose how to provide your PDF documents
+                    Choose how to provide your documents (PDF, Word, Excel, Images, Audio, Video, etc.)
                 </p>
             </div>
             """, unsafe_allow_html=True)
 
             # Source selection
             source_option = st.radio(
-                "📁 PDF Source",
+                "📁 Document Source",
                 ["📤 Upload Files (Drag & Drop)", "📂 Use Server Folder"],
                 horizontal=True,
                 help="Choose to upload files from your computer or use files from server"
@@ -952,22 +1421,25 @@ with tab2:
                 
                 st.markdown("""
                 <div class="glass-panel" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3);">
-                    <h4 style="color: #a78bfa; margin-bottom: 0.5rem;">📤 Upload Your PDF Files</h4>
+                    <h4 style="color: #a78bfa; margin-bottom: 0.5rem;">📤 Upload Your Documents</h4>
                     <p style="color: rgba(255,255,255,0.8); margin: 0.5rem 0;">
-                        Drag and drop PDF files below or click to browse
+                        Drag and drop files below or click to browse
                     </p>
                     <p style="color: rgba(255,255,255,0.6); margin: 0; font-size: 0.9rem;">
-                        You can upload multiple files at once
+                        Supported: PDF, Word, Excel, PowerPoint, Images, Audio, Video, Text, Markdown
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
 
                 uploaded_files = st.file_uploader(
-                    "Choose PDF files",
-                    type=['pdf'],
+                    "Choose files",
+                    type=['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'md', 'markdown',
+                          'png', 'jpg', 'jpeg', 'tiff', 'bmp', 'gif',
+                          'mp3', 'wav', 'm4a', 'flac', 'ogg',
+                          'mp4', 'avi', 'mov', 'mkv', 'flv'],
                     accept_multiple_files=True,
-                    key="pdf_uploader",
-                    help="Select one or more PDF files from your computer"
+                    key="file_uploader",
+                    help="Select one or more files from your computer"
                 )
 
                 save_folder = st.text_input(
@@ -1061,24 +1533,32 @@ with tab2:
 
                 if st.button("🔍 Scan Selected Folder", key="check_pdfs", width="stretch"):
                     if os.path.exists(pdf_folder):
-                        with st.spinner(f"Scanning {pdf_folder} for PDF files..."):
-                            pdf_files = get_all_pdfs(pdf_folder)
-                            st.session_state.found_pdfs = pdf_files
+                        with st.spinner(f"Scanning {pdf_folder} for supported files..."):
+                            all_files = get_all_documents(pdf_folder)
+                            st.session_state.found_pdfs = all_files
                             st.session_state.pdf_folder = pdf_folder
                             st.session_state.save_folder = save_folder
                             
-                            if pdf_files:
-                                st.success(f"✅ Found {len(pdf_files)} PDF file(s) in {pdf_folder}")
+                            if all_files:
+                                # Count file types
+                                file_type_counts = {}
+                                for f in all_files:
+                                    ext = f.suffix.lower()
+                                    file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
+                                
+                                type_summary = ', '.join([f"{count} {ext}" for ext, count in sorted(file_type_counts.items())])
+                                st.success(f"✅ Found {len(all_files)} file(s) in {pdf_folder}")
+                                st.info(f"📊 File types: {type_summary}")
                                 
                                 # Show preview of found files
-                                with st.expander("📄 View Found PDFs", expanded=True):
-                                    for i, pdf in enumerate(pdf_files[:10], 1):  # Show first 10
-                                        st.markdown(f"**{i}.** `{pdf.name}` ({pdf.parent})")
-                                    if len(pdf_files) > 10:
-                                        st.markdown(f"*... and {len(pdf_files) - 10} more files*")
+                                with st.expander("📄 View Found Files", expanded=True):
+                                    for i, file in enumerate(all_files[:10], 1):  # Show first 10
+                                        st.markdown(f"**{i}.** `{file.name}` ({file.suffix}) - {file.parent}")
+                                    if len(all_files) > 10:
+                                        st.markdown(f"*... and {len(all_files) - 10} more files*")
                             else:
-                                st.error(f"❌ No PDF files found in {pdf_folder}")
-                                st.info("💡 Make sure your folder contains .pdf files")
+                                st.error(f"❌ No supported files found in {pdf_folder}")
+                                st.info("💡 Supported formats: PDF, Word, Excel, PowerPoint, Images, Audio, Video, Text, Markdown")
                     else:
                         st.error(f"❌ Folder does not exist: {pdf_folder}")
                         st.info("💡 Please check the folder path and try again")
@@ -1087,14 +1567,20 @@ with tab2:
             if st.session_state.found_pdfs:
                 st.markdown('<div style="margin-top: 1.5rem;"></div>', unsafe_allow_html=True)
                 
+                file_type_counts = {}
+                for f in st.session_state.found_pdfs:
+                    ext = f.suffix.lower()
+                    file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
+                type_summary = ', '.join([f"{count} {ext}" for ext, count in sorted(file_type_counts.items())])
+                
                 st.markdown(f"""
                 <div class="glass-panel" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
                     <h4 style="color: #10b981; margin-bottom: 0.5rem;">✅ Ready to Process</h4>
                     <p style="color: rgba(255,255,255,0.8); margin: 0;">
-                        <strong>{len(st.session_state.found_pdfs)} PDF files</strong> will be processed from <strong>{st.session_state.pdf_folder}</strong>
+                        <strong>{len(st.session_state.found_pdfs)} files</strong> will be processed from <strong>{st.session_state.pdf_folder}</strong>
                     </p>
                     <p style="color: rgba(255,255,255,0.6); margin: 0.5rem 0 0 0; font-size: 0.9rem;">
-                        This will create text chunks and vector embeddings for intelligent search
+                        File types: {type_summary}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
