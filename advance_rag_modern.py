@@ -1043,7 +1043,7 @@ else:
                                 "Document": s.get("Document", "Unknown"),
                                 "Page": str(s.get("Page", "Unknown"))
                             })
-                        df = pandas.DataFrame(display_sources)
+                        df = pd.DataFrame(display_sources)
                         st.dataframe(df, use_container_width=True, hide_index=True)
 
                         # Show detailed source content
