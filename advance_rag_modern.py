@@ -937,6 +937,34 @@ with st.sidebar:
     st.session_state.selected_provider = model_provider
     st.session_state.selected_model = selected_model
     
+    # Initialize AI when model selection changes
+    if st.session_state.database_loaded:
+        # Get appropriate API key
+        api_key = None
+        if model_provider == "DeepSeek":
+            api_key = deepseek_api_key
+        elif model_provider == "ChatGPT (OpenAI)":
+            api_key = openai_api_key
+        elif model_provider == "Groq":
+            api_key = groq_api_key
+        
+        # Initialize LLM with selected model
+        if api_key:
+            current_provider = st.session_state.get('model_provider')
+            current_model = st.session_state.get('llm_model_name')
+            
+            # Only reinitialize if model changed
+            if current_provider != model_provider or current_model != selected_model:
+                with st.spinner(f"Initializing {model_provider}..."):
+                    llm = initialize_llm(model_provider, selected_model, api_key)
+                    if llm:
+                        st.session_state.llm = llm
+                        st.session_state.model_provider = model_provider
+                        st.session_state.llm_model_name = selected_model
+                        st.session_state.llm_configured = True
+                        st.success(f"✅ {model_provider} Ready!")
+                        st.rerun()
+    
     st.markdown("---")
     st.markdown("### 📤 Upload Documents")
     
