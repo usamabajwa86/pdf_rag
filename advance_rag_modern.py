@@ -50,6 +50,7 @@ AVAILABLE_MODELS = {
         "GPT-3.5 Turbo": "gpt-3.5-turbo"
     },
     "Groq": {
+        "GPT-OSS 120B": "llama-3.3-70b-versatile",
         "Llama 3.1 70B": "llama-3.1-70b-versatile",
         "Llama 3.1 8B": "llama-3.1-8b-instant",
         "Mixtral 8x7B": "mixtral-8x7b-32768"
@@ -950,19 +951,19 @@ with st.sidebar:
         
         # Initialize LLM with selected model
         if api_key:
-            current_provider = st.session_state.get('model_provider')
-            current_model = st.session_state.get('llm_model_name')
+            current_model_key = f"{model_provider}:{selected_model}"
+            session_model_key = f"{st.session_state.get('model_provider', '')}:{st.session_state.get('llm_model_name', '')}"
             
             # Only reinitialize if model changed
-            if current_provider != model_provider or current_model != selected_model:
-                with st.spinner(f"Initializing {model_provider}..."):
+            if current_model_key != session_model_key:
+                with st.spinner(f"Initializing {selected_model_display}..."):
                     llm = initialize_llm(model_provider, selected_model, api_key)
                     if llm:
                         st.session_state.llm = llm
                         st.session_state.model_provider = model_provider
                         st.session_state.llm_model_name = selected_model
                         st.session_state.llm_configured = True
-                        st.success(f"✅ {model_provider} Ready!")
+                        st.success(f"✅ {selected_model_display} Ready!")
                         st.rerun()
     
     st.markdown("---")
