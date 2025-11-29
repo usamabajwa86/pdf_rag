@@ -938,24 +938,22 @@ with st.sidebar:
     st.session_state.selected_provider = model_provider
     st.session_state.selected_model = selected_model
     
-    # Initialize AI when model selection changes
-    if st.session_state.database_loaded:
-        # Get appropriate API key
-        api_key = None
-        if model_provider == "DeepSeek":
-            api_key = deepseek_api_key
-        elif model_provider == "ChatGPT (OpenAI)":
-            api_key = openai_api_key
-        elif model_provider == "Groq":
-            api_key = groq_api_key
-        
-        # Initialize LLM with selected model
-        if api_key:
-            current_model_key = f"{model_provider}:{selected_model}"
-            session_model_key = f"{st.session_state.get('model_provider', '')}:{st.session_state.get('llm_model_name', '')}"
+    # Button to initialize selected AI model
+    if st.button("🚀 Initialize AI Model", key="init_ai", use_container_width=True):
+        if not st.session_state.database_loaded:
+            st.warning("⚠️ Please load a database first!")
+        else:
+            # Get appropriate API key
+            api_key = None
+            if model_provider == "DeepSeek":
+                api_key = deepseek_api_key
+            elif model_provider == "ChatGPT (OpenAI)":
+                api_key = openai_api_key
+            elif model_provider == "Groq":
+                api_key = groq_api_key
             
-            # Only reinitialize if model changed
-            if current_model_key != session_model_key:
+            # Initialize LLM with selected model
+            if api_key:
                 with st.spinner(f"Initializing {selected_model_display}..."):
                     llm = initialize_llm(model_provider, selected_model, api_key)
                     if llm:
@@ -965,6 +963,8 @@ with st.sidebar:
                         st.session_state.llm_configured = True
                         st.success(f"✅ {selected_model_display} Ready!")
                         st.rerun()
+            else:
+                st.error(f"❌ API key not found for {model_provider}")
     
     st.markdown("---")
     st.markdown("### 📤 Upload Documents")
