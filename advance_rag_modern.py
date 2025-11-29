@@ -785,7 +785,7 @@ if 'llm_configured' not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar File Explorer
+# Sidebar with All Controls
 with st.sidebar:
     st.markdown("""
     <div style="text-align: center; padding: 1.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
@@ -794,14 +794,112 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 📁 Loaded Documents")
+    # Initialize session state
+    if 'scanned_databases' not in st.session_state:
+        st.session_state.scanned_databases = []
+    if 'found_pdfs' not in st.session_state:
+        st.session_state.found_pdfs = []
     
-    if st.session_state.database_loaded and 'metadata' in st.session_state:
-        metadata = st.session_state.metadata
+    # Auto-scan for existing databases
+    if not st.session_state.scanned_databases:
+        databases = scan_folder_for_databases(".")
+        st.session_state.scanned_databases = databases
+    
+    st.markdown("---")
+    st.markdown("### 📂 Database Selection")
+    
+    # Show existing databases
+    if st.session_state.scanned_databases:
+        selected_db = st.selectbox(
+            "Select Database",
+            range(len(st.session_state.scanned_databases)),
+            format_func=lambda x: st.session_state.scanned_databases[x]['name'],
+            key="db_selector"
+        )
         
-        # Display document tree
+        if st.button("🚀 Load Database", key="load_db", use_container_width=True):
+            with st.spinner("Loading database..."):
+                db_info = st.session_state.scanned_databases[selected_db]
+                result = load_existing_database(db_info['path'], db_info['db_folder'])
+                
+                if result:
+                    vector_store, bm25_retriever, documents, embeddings, metadata = result
+                    st.session_state.vector_store = vector_store
+                    st.session_state.bm25_retriever = bm25_retriever
+                    st.session_state.documents = documents
+                    st.session_state.embeddings = embeddings
+                    st.session_state.metadata = metadata
+                    st.session_state.database_loaded = True
+                    
+                    # Auto-initialize AI model with GPT-OSS 120B
+                    if groq_api_key:
+                        llm = initialize_llm("API Models (Groq)", "openai/gpt-oss-120b", groq_api_key)
+                        if llm:
+                            st.session_state.llm = llm
+                            st.session_state.model_provider = "API Models (Groq)"
+                            st.session_state.selected_model = "openai/gpt-oss-120b"
+                            st.session_state.llm_configured = True
+                    
+                    st.success("✅ Database & AI Ready!")
+                    st.rerun()
+    else:
+        st.info("No existing databases found")
+    
+    st.markdown("---")
+    st.markdown("### 📤 Upload Documents")
+    
+    uploaded_files = st.file_uploader(
+        "Upload PDF files",
+        type=['pdf'],
+        accept_multiple_files=True,
+        key="pdf_uploader"
+    )
+    
+    if uploaded_files:
+        if st.button("🚀 Process & Load", key="process_load", use_container_width=True):
+            with st.spinner("Processing files..."):
+                import tempfile
+                temp_dir = tempfile.mkdtemp()
+                pdf_paths = []
+                
+                for uploaded_file in uploaded_files:
+                    temp_path = os.path.join(temp_dir, uploaded_file.name)
+                    with open(temp_path, 'wb') as f:
+                        f.write(uploaded_file.getbuffer())
+                    pdf_paths.append(Path(temp_path))
+                
+                result = create_new_database(pdf_paths, "vector_databases")
+                
+                if result:
+                    vector_store, bm25_retriever, documents, embeddings, metadata = result
+                    st.session_state.vector_store = vector_store
+                    st.session_state.bm25_retriever = bm25_retriever
+                    st.session_state.documents = documents
+                    st.session_state.embeddings = embeddings
+                    st.session_state.metadata = metadata
+                    st.session_state.database_loaded = True
+                    st.session_state.scanned_databases = []
+                    
+                    # Auto-initialize AI model with GPT-OSS 120B
+                    if groq_api_key:
+                        llm = initialize_llm("API Models (Groq)", "openai/gpt-oss-120b", groq_api_key)
+                        if llm:
+                            st.session_state.llm = llm
+                            st.session_state.model_provider = "API Models (Groq)"
+                            st.session_state.selected_model = "openai/gpt-oss-120b"
+                            st.session_state.llm_configured = True
+                    
+                    st.success("✅ Files Processed & AI Ready!")
+                    st.rerun()
+    
+    # Show loaded documents
+    if st.session_state.database_loaded and 'metadata' in st.session_state:
+        st.markdown("---")
+        st.markdown("### 📄 Loaded Documents")
+        
+        metadata = st.session_state.metadata
         st.markdown(f"""
-        <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px; margin-top: 1rem;">
+        <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px; margin-top: 0.5rem;">
             <p style="color: rgba(255,255,255,0.6); margin: 0 0 0.5rem 0; font-size: 0.75rem;">DATABASE INFO</p>
             <p style="color: white; margin: 0; font-weight: 600;">📊 {metadata.get('total_pdfs', 0)} Documents</p>
             <p style="color: rgba(255,255,255,0.7); margin: 0.25rem 0 0 0; font-size: 0.875rem;">
@@ -810,38 +908,21 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("#### 📄 Files")
-        
-        # Display each PDF file
+        # Display files in expander
         pdf_files = metadata.get('pdf_files', [])
-        for i, pdf_path in enumerate(pdf_files[:20], 1):  # Show max 20 files
-            file_name = os.path.basename(pdf_path)
-            
-            # Create expandable file item
-            with st.expander(f"📄 {file_name[:30]}{'...' if len(file_name) > 30 else ''}", expanded=False):
-                st.markdown(f"""
-                <div style="font-size: 0.75rem; color: rgba(255,255,255,0.6);">
-                    <p style="margin: 0.25rem 0;"><strong>File:</strong> {file_name}</p>
-                    <p style="margin: 0.25rem 0;"><strong>Path:</strong> {pdf_path[:50]}...</p>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        if len(pdf_files) > 20:
-            st.markdown(f"<p style='color: rgba(255,255,255,0.5); font-size: 0.875rem;'>+ {len(pdf_files) - 20} more files</p>", unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div style="text-align: center; padding: 2rem 1rem; color: rgba(255,255,255,0.4);">
-            <p style="font-size: 2rem; margin: 0;">📭</p>
-            <p style="margin: 0.5rem 0 0 0; font-size: 0.875rem;">No documents loaded</p>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.expander(f"📂 View Files ({len(pdf_files)})", expanded=False):
+            for i, pdf_path in enumerate(pdf_files[:20], 1):
+                file_name = os.path.basename(pdf_path)
+                st.markdown(f"**{i}.** {file_name[:40]}{'...' if len(file_name) > 40 else ''}")
+            if len(pdf_files) > 20:
+                st.markdown(f"*+ {len(pdf_files) - 20} more files*")
     
     # Status indicators
     st.markdown("---")
-    st.markdown("### ⚙️ System Status")
+    st.markdown("### ⚙️ Status")
     
     db_status = "🟢 Active" if st.session_state.database_loaded else "🔴 Not Loaded"
-    ai_status = "🟢 Ready" if st.session_state.llm_configured else "🔴 Not Configured"
+    ai_status = "🟢 GPT-OSS 120B" if st.session_state.llm_configured else "🔴 Not Ready"
     
     st.markdown(f"""
     <div style="font-size: 0.875rem;">
@@ -859,7 +940,7 @@ st.markdown("""
 <div class="top-bar">
     <div class="logo-section">
         <div class="logo-icon">🧠</div>
-        <div class="logo-text">DocuMind AI</div>
+        <div class="logo-text">DocuMind AI - Chat Interface</div>
     </div>
     <div class="status-badge">
         <span>●</span> System Ready
@@ -870,347 +951,135 @@ st.markdown("""
 # Content Container
 st.markdown('<div class="content-container">', unsafe_allow_html=True)
 
-# Main Tabs Navigation
-tab1, tab2, tab3 = st.tabs(["🏠 Dashboard", "⚙️ Configuration", "💬 Chat"])
-
-# TAB 1: DASHBOARD
-with tab1:
-    st.markdown('<div class="card-title"><span class="card-title-icon">📊</span>System Overview</div>', unsafe_allow_html=True)
-
-    if st.session_state.database_loaded and st.session_state.llm_configured:
-        metadata = st.session_state.metadata
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric("📄 Documents", metadata['total_pdfs'])
-        with col2:
-            st.metric("📝 Text Chunks", f"{metadata['total_chunks']:,}")
-        with col3:
-            st.metric("🤖 AI Model", st.session_state.selected_model.split(':')[0][:15])
-        with col4:
-            st.metric("🔍 Search Mode", "Hybrid")
-
-        st.markdown('<div style="margin-top: 2rem;"></div>', unsafe_allow_html=True)
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("""
-            <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">📊 Database Details</h4>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Embedding Model:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Created:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Chunk Size:</strong> {} tokens</p>
-            </div>
-            """.format(
-                metadata['embedding_model'],
-                metadata['created_at'],
-                metadata['chunk_size']
-            ), unsafe_allow_html=True)
-
-        with col2:
-            st.markdown("""
-            <div class="glass-panel">
-                <h4 style="color: white; margin-bottom: 1rem;">🤖 AI Configuration</h4>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Provider:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Model:</strong> {}</p>
-                <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0;">
-                    <strong>Status:</strong> <span style="color: #10b981;">● Active</span></p>
-            </div>
-            """.format(
-                "Local (Ollama)" if st.session_state.model_provider == "Local Models (Ollama)" else "Cloud (Groq)",
-                st.session_state.selected_model
-            ), unsafe_allow_html=True)
-
-    else:
-        st.markdown("""
-        <div class="modern-card">
-            <h3 style="color: white; text-align: center; margin-bottom: 1rem;">Welcome to DocuMind AI</h3>
-            <p style="color: rgba(255,255,255,0.7); text-align: center; font-size: 1.1rem;">
-                Please configure your database and AI model in the Configuration tab to get started.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-# TAB 2: CONFIGURATION
-with tab2:
-    st.markdown('<div class="card-title"><span class="card-title-icon">⚙️</span>Quick Setup</div>', unsafe_allow_html=True)
-    
-    # Simplified single-step data loading
+# MAIN CHAT AREA
+if not st.session_state.database_loaded or not st.session_state.llm_configured:
     st.markdown("""
-    <div class="glass-panel">
-        <h4 style="color: white; margin-bottom: 1rem;">📁 Load Your Documents</h4>
-        <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">
-            Upload PDF files or select from existing databases
+    <div class="modern-card">
+        <h3 style="color: white; text-align: center;">⚠️ Setup Required</h3>
+        <p style="color: rgba(255,255,255,0.7); text-align: center; margin-top: 1rem;">
+            👈 Please use the sidebar to load documents and configure the AI model.
         </p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Initialize session state
-    if 'scanned_databases' not in st.session_state:
-        st.session_state.scanned_databases = []
-    if 'found_pdfs' not in st.session_state:
-        st.session_state.found_pdfs = []
-    
-    # Auto-scan for existing databases
-    if not st.session_state.scanned_databases:
-        databases = scan_folder_for_databases(".")
-        st.session_state.scanned_databases = databases
-    
-    # Show existing databases first
-    if st.session_state.scanned_databases:
-        st.markdown("### 📚 Existing Databases")
-        
-        selected_db = st.selectbox(
-            "Select Database",
-            range(len(st.session_state.scanned_databases)),
-            format_func=lambda x: st.session_state.scanned_databases[x]['name']
-        )
-        
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button("🚀 Load Database", key="load_db", use_container_width=True):
-                with st.spinner("Loading database..."):
-                    db_info = st.session_state.scanned_databases[selected_db]
-                    result = load_existing_database(db_info['path'], db_info['db_folder'])
-                    
-                    if result:
-                        vector_store, bm25_retriever, documents, embeddings, metadata = result
-                        st.session_state.vector_store = vector_store
-                        st.session_state.bm25_retriever = bm25_retriever
-                        st.session_state.documents = documents
-                        st.session_state.embeddings = embeddings
-                        st.session_state.metadata = metadata
-                        st.session_state.database_loaded = True
-                        st.success("✅ Database loaded!")
-                        st.rerun()
-        
-        st.markdown("---")
-    
-    # Upload new files section
-    st.markdown("### 📤 Upload New Documents")
-    
-    uploaded_files = st.file_uploader(
-        "Drag and drop PDF files here",
-        type=['pdf'],
-        accept_multiple_files=True,
-        key="pdf_uploader"
+else:
+    st.markdown('<div class="card-title"><span class="card-title-icon">💬</span>Chat with Your Documents</div>', unsafe_allow_html=True)
+
+    # Create hybrid retriever
+    hybrid_retriever = create_hybrid_retriever(
+        st.session_state.vector_store,
+        st.session_state.bm25_retriever
     )
-    
-    if uploaded_files:
-        if st.button("🚀 Process & Load Files", key="process_load", use_container_width=True):
-            with st.spinner("Processing files..."):
-                import tempfile
-                temp_dir = tempfile.mkdtemp()
-                pdf_paths = []
-                
-                for uploaded_file in uploaded_files:
-                    temp_path = os.path.join(temp_dir, uploaded_file.name)
-                    with open(temp_path, 'wb') as f:
-                        f.write(uploaded_file.getbuffer())
-                    pdf_paths.append(Path(temp_path))
-                
-                # Create database immediately
-                result = create_new_database(pdf_paths, "vector_databases")
-                
-                if result:
-                    vector_store, bm25_retriever, documents, embeddings, metadata = result
-                    st.session_state.vector_store = vector_store
-                    st.session_state.bm25_retriever = bm25_retriever
-                    st.session_state.documents = documents
-                    st.session_state.embeddings = embeddings
-                    st.session_state.metadata = metadata
-                    st.session_state.database_loaded = True
-                    st.session_state.scanned_databases = []  # Reset to rescan
-                    st.success("✅ Files processed and loaded!")
-                    st.rerun()
-    
-    st.markdown("---")
-    
-    # AI Model Configuration
-    st.markdown('<div class="card-title"><span class="card-title-icon">🤖</span>AI Model</div>', unsafe_allow_html=True)
-    
-    if not st.session_state.database_loaded:
-        st.info("👆 Please load documents first")
-    else:
-        model_provider = st.selectbox(
-            "🏭 Model Provider",
-            ["API Models (Groq)", "Local Models (Ollama)"]
-        )
-        
-        if model_provider == "API Models (Groq)":
-            if groq_api_key:
-                st.success("✅ Groq API Key configured")
-                selected_model_display = st.selectbox(
-                    "Select Model",
-                    list(AVAILABLE_MODELS["API Models (Groq)"].keys())
-                )
-                selected_model = AVAILABLE_MODELS["API Models (Groq)"][selected_model_display]
+
+    llm = st.session_state.llm
+
+    prompt = ChatPromptTemplate.from_template("""
+    You are an expert assistant analyzing documents. Answer the following question based only on the provided context.
+    Be comprehensive, detailed, and include specific references.
+
+    <context>
+    {context}
+    </context>
+
+    Question: {input}
+
+    Answer:
+    """)
+
+    document_chain = create_stuff_documents_chain(llm, prompt)
+    retrieval_chain = create_retrieval_chain(hybrid_retriever, document_chain)
+
+    # Display chat history
+    for idx, message in enumerate(st.session_state.messages):
+        with st.chat_message(message["role"]):
+            if message["role"] == "assistant":
+                st.markdown(message["content"], unsafe_allow_html=True)
+
+                # Display sources if available
+                if "sources" in message and message["sources"]:
+                    with st.expander("📚 View Sources", expanded=False):
+                        import pandas as pd
+                        # Create simplified dataframe for display
+                        display_sources = []
+                        for s in message["sources"]:
+                            display_sources.append({
+                                "Citation": s.get("Citation", ""),
+                                "Document": s.get("Document", "Unknown"),
+                                "Page": str(s.get("Page", "Unknown"))
+                            })
+                        df = pandas.DataFrame(display_sources)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+
+                        # Show detailed source content
+                        st.markdown("---")
+                        st.markdown("**📖 Source Content Preview:**")
+                        for i, source in enumerate(message["sources"]):
+                            st.markdown(f"**[{i+1}] {source.get('Document', 'Unknown')} - Page {source.get('Page', 'Unknown')}**")
+                            if "content" in source:
+                                preview = source["content"][:300] + "..." if len(source["content"]) > 300 else source["content"]
+                                st.markdown(f'<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin: 0.5rem 0 1rem 0; color: rgba(255,255,255,0.7); line-height: 1.6;">{preview}</div>', unsafe_allow_html=True)
             else:
-                st.error("❌ No API key found. Add GROQ_API_KEY to Streamlit Secrets.")
-                selected_model = None
-        else:
-            ollama_running = check_ollama_connection()
-            if ollama_running:
-                available_models = get_available_ollama_models()
-                if available_models:
-                    st.success("✅ Ollama is running")
-                    selected_model = st.selectbox("Select Model", available_models)
-                else:
-                    st.error("❌ No models found. Run: `ollama pull llama3.2:3b`")
-                    selected_model = None
-            else:
-                st.error("❌ Ollama is not running")
-                selected_model = None
-        
-        if selected_model and st.button("🚀 Activate AI", key="init_model", use_container_width=True):
-            with st.spinner("Initializing AI..."):
-                llm = initialize_llm(model_provider, selected_model, groq_api_key)
-                
-                if llm:
-                    st.session_state.llm = llm
-                    st.session_state.model_provider = model_provider
-                    st.session_state.selected_model = selected_model
-                    st.session_state.llm_configured = True
-                    st.success("✅ AI Ready! Go to Chat tab.")
-                    st.balloons()
+                st.markdown(message["content"])
 
-# TAB 3: CHAT
-with tab3:
-    if not st.session_state.database_loaded or not st.session_state.llm_configured:
-        st.markdown("""
-        <div class="modern-card">
-            <h3 style="color: white; text-align: center;">⚠️ Configuration Required</h3>
-            <p style="color: rgba(255,255,255,0.7); text-align: center; margin-top: 1rem;">
-                Please configure your database and AI model in the Configuration tab before starting a chat.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="card-title"><span class="card-title-icon">💬</span>Intelligent Conversation</div>', unsafe_allow_html=True)
+    # Chat input at the bottom
+    if prompt_input := st.chat_input("💭 Ask me anything about your documents..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt_input})
 
-        # Create hybrid retriever
-        hybrid_retriever = create_hybrid_retriever(
-            st.session_state.vector_store,
-            st.session_state.bm25_retriever
-        )
+        # Generate response
+        try:
+            response = retrieval_chain.invoke({"input": prompt_input})
+            answer = response["answer"]
 
-        llm = st.session_state.llm
+            # Process answer with citations
+            processed_answer = process_answer_with_citations(answer, response["context"])
+            styled_answer = f'<div class="answer-content">{processed_answer}</div>'
 
-        prompt = ChatPromptTemplate.from_template("""
-        You are an expert assistant analyzing documents. Answer the following question based only on the provided context.
-        Be comprehensive, detailed, and include specific references.
-
-        <context>
-        {context}
-        </context>
-
-        Question: {input}
-
-        Answer:
-        """)
-
-        document_chain = create_stuff_documents_chain(llm, prompt)
-        retrieval_chain = create_retrieval_chain(hybrid_retriever, document_chain)
-
-        # Display chat history
-        for idx, message in enumerate(st.session_state.messages):
-            with st.chat_message(message["role"]):
-                if message["role"] == "assistant":
-                    st.markdown(message["content"], unsafe_allow_html=True)
-
-                    # Display sources if available
-                    if "sources" in message and message["sources"]:
-                        with st.expander("📚 View Sources", expanded=False):
-                            import pandas as pd
-                            # Create simplified dataframe for display
-                            display_sources = []
-                            for s in message["sources"]:
-                                display_sources.append({
-                                    "Citation": s.get("Citation", ""),
-                                    "Document": s.get("Document", "Unknown"),
-                                    "Page": str(s.get("Page", "Unknown"))
-                                })
-                            df = pd.DataFrame(display_sources)
-                            st.dataframe(df, use_container_width=True, hide_index=True)
-
-                            # Show detailed source content
-                            st.markdown("---")
-                            st.markdown("**📖 Source Content Preview:**")
-                            for i, source in enumerate(message["sources"]):
-                                st.markdown(f"**[{i+1}] {source.get('Document', 'Unknown')} - Page {source.get('Page', 'Unknown')}**")
-                                if "content" in source:
-                                    preview = source["content"][:300] + "..." if len(source["content"]) > 300 else source["content"]
-                                    st.markdown(f'<div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px; margin: 0.5rem 0 1rem 0; color: rgba(255,255,255,0.7); line-height: 1.6;">{preview}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(message["content"])
-
-        # Chat input at the bottom
-        if prompt_input := st.chat_input("💭 Ask me anything about your documents..."):
-            # Add user message
-            st.session_state.messages.append({"role": "user", "content": prompt_input})
-
-            # Generate response
-            try:
-                response = retrieval_chain.invoke({"input": prompt_input})
-                answer = response["answer"]
-
-                # Process answer with citations
-                processed_answer = process_answer_with_citations(answer, response["context"])
-                styled_answer = f'<div class="answer-content">{processed_answer}</div>'
-
-                # Prepare source data
-                import pandas as pd
-                source_data = []
-                for i, doc in enumerate(response["context"]):
-                    source_file = doc.metadata.get('source_file', 'Unknown')
-                    page_num = doc.metadata.get('page', 'Unknown')
-                    full_path = doc.metadata.get('full_path', '')
-                    source_data.append({
-                        "Citation": f"[{i+1}]",
-                        "Document": source_file,
-                        "Page": str(page_num),
-                        "content": doc.page_content,
-                        "path": full_path
-                    })
-
-                # Save to session with sources
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": styled_answer,
-                    "sources": source_data
+            # Prepare source data
+            import pandas as pd
+            source_data = []
+            for i, doc in enumerate(response["context"]):
+                source_file = doc.metadata.get('source_file', 'Unknown')
+                page_num = doc.metadata.get('page', 'Unknown')
+                full_path = doc.metadata.get('full_path', '')
+                source_data.append({
+                    "Citation": f"[{i+1}]",
+                    "Document": source_file,
+                    "Page": str(page_num),
+                    "content": doc.page_content,
+                    "path": full_path
                 })
 
-                # Force rerun to display the new message
-                st.rerun()
+            # Save to session with sources
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": styled_answer,
+                "sources": source_data
+            })
 
-            except Exception as e:
-                error_msg = f"❌ Error: {str(e)}"
-                st.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                st.rerun()
+            # Force rerun to display the new message
+            st.rerun()
 
-        # Action buttons
-        st.markdown('<div style="margin-top: 2rem;"></div>', unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            if st.button("🗑️ Clear Chat", key="clear_chat"):
-                st.session_state.messages = []
-                st.rerun()
-        with col2:
-            if st.button("🔄 Reset All", key="reset_config"):
-                st.session_state.database_loaded = False
-                st.session_state.llm_configured = False
-                st.session_state.messages = []
-                st.session_state.scanned_databases = []
-                st.session_state.found_pdfs = []
-                st.rerun()
+        except Exception as e:
+            error_msg = f"❌ Error: {str(e)}"
+            st.error(error_msg)
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+            st.rerun()
+
+    # Action buttons
+    st.markdown('<div style="margin-top: 2rem;"></div>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("🗑️ Clear Chat", key="clear_chat"):
+            st.session_state.messages = []
+            st.rerun()
+    with col2:
+        if st.button("🔄 Reset All", key="reset_config"):
+            st.session_state.database_loaded = False
+            st.session_state.llm_configured = False
+            st.session_state.messages = []
+            st.session_state.scanned_databases = []
+            st.session_state.found_pdfs = []
+            st.rerun()
 
 st.markdown('</div>', unsafe_allow_html=True)
 
