@@ -40,16 +40,19 @@ NUM_RESULTS = 8
 
 # Available Models
 AVAILABLE_MODELS = {
-    "Local Models (Ollama)": {
-        "llama3.2:3b": "llama3.2:3b",
-        "llama3.2:1b": "llama3.2:1b",
-        "llama3.1:8b": "llama3.1:8b",
-        "mistral:7b": "mistral:7b",
-        "codellama:7b": "codellama:7b"
-    },
-    "API Models (DeepSeek)": {
+    "DeepSeek": {
         "DeepSeek Chat": "deepseek-chat",
         "DeepSeek Coder": "deepseek-coder"
+    },
+    "ChatGPT (OpenAI)": {
+        "GPT-4": "gpt-4",
+        "GPT-4 Turbo": "gpt-4-turbo-preview",
+        "GPT-3.5 Turbo": "gpt-3.5-turbo"
+    },
+    "Groq": {
+        "Llama 3.1 70B": "llama-3.1-70b-versatile",
+        "Llama 3.1 8B": "llama-3.1-8b-instant",
+        "Mixtral 8x7B": "mixtral-8x7b-32768"
     }
 }
 
@@ -77,28 +80,35 @@ def get_available_ollama_models():
 def initialize_llm(model_provider, model_name, api_key=None):
     """Initialize the appropriate LLM based on provider"""
     try:
-        if model_provider == "Local Models (Ollama)":
-            if not check_ollama_connection():
-                st.error("❌ Ollama is not running! Please start Ollama service.")
-                return None
-
-            available_models = get_available_ollama_models()
-            if model_name not in available_models:
-                st.warning(f"⚠️ Model '{model_name}' not found in Ollama.")
-                st.info("To install: `ollama pull " + model_name + "`")
-                return None
-
-            return Ollama(model=model_name, base_url="http://localhost:11434", temperature=0.1)
-
-        elif model_provider == "API Models (DeepSeek)":
+        if model_provider == "DeepSeek":
             if not api_key:
                 st.error("❌ DEEPSEEK_API_KEY not found!")
                 return None
-
             return ChatOpenAI(
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
                 model=model_name,
+                temperature=0
+            )
+        
+        elif model_provider == "ChatGPT (OpenAI)":
+            if not api_key:
+                st.error("❌ OPENAI_API_KEY not found!")
+                return None
+            return ChatOpenAI(
+                api_key=api_key,
+                model=model_name,
+                temperature=0
+            )
+        
+        elif model_provider == "Groq":
+            if not api_key:
+                st.error("❌ GROQ_API_KEY not found!")
+                return None
+            from langchain_groq import ChatGroq
+            return ChatGroq(
+                groq_api_key=api_key,
+                model_name=model_name,
                 temperature=0
             )
 
@@ -107,15 +117,23 @@ def initialize_llm(model_provider, model_name, api_key=None):
         st.error(f"❌ Error initializing LLM: {e}")
         return None
 
-# Try to get API key from secrets first, then env
+# Try to get API keys from secrets first, then env
 try:
     deepseek_api_key = st.secrets.get('DEEPSEEK_API_KEY', os.environ.get('DEEPSEEK_API_KEY'))
+    openai_api_key = st.secrets.get('OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY'))
+    groq_api_key = st.secrets.get('GROQ_API_KEY', os.environ.get('GROQ_API_KEY'))
 except:
     deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY')
+    openai_api_key = os.environ.get('OPENAI_API_KEY')
+    groq_api_key = os.environ.get('GROQ_API_KEY')
 
-# Set default API key if not found
+# Set default API keys if not found (fallback only, use secrets.toml or Streamlit Cloud Secrets)
 if not deepseek_api_key:
-    deepseek_api_key = "sk-321b1d5fd53a4eba947f5e3a64213134"
+    deepseek_api_key = os.environ.get('DEEPSEEK_KEY_FALLBACK', '')
+if not openai_api_key:
+    openai_api_key = os.environ.get('OPENAI_KEY_FALLBACK', '')
+if not groq_api_key:
+    groq_api_key = os.environ.get('GROQ_KEY_FALLBACK', '')
 
 def load_document(file_path):
     """Load document based on file type"""
@@ -873,19 +891,51 @@ with st.sidebar:
                     st.session_state.metadata = metadata
                     st.session_state.database_loaded = True
                     
-                    # Auto-initialize AI model with DeepSeek Chat
-                    if deepseek_api_key:
-                        llm = initialize_llm("API Models (DeepSeek)", "deepseek-chat", deepseek_api_key)
+                    # Auto-initialize AI model with selected provider
+                    selected_provider = st.session_state.get('selected_provider', 'DeepSeek')
+                    selected_model_name = st.session_state.get('selected_model', 'deepseek-chat')
+                    
+                    api_key = None
+                    if selected_provider == "DeepSeek":
+                        api_key = deepseek_api_key
+                    elif selected_provider == "ChatGPT (OpenAI)":
+                        api_key = openai_api_key
+                    elif selected_provider == "Groq":
+                        api_key = groq_api_key
+                    
+                    if api_key:
+                        llm = initialize_llm(selected_provider, selected_model_name, api_key)
                         if llm:
                             st.session_state.llm = llm
-                            st.session_state.model_provider = "API Models (DeepSeek)"
-                            st.session_state.selected_model = "deepseek-chat"
+                            st.session_state.model_provider = selected_provider
+                            st.session_state.selected_model = selected_model_name
                             st.session_state.llm_configured = True
                     
                     st.success("✅ Database & AI Ready!")
                     st.rerun()
     else:
         st.info("No existing databases found")
+    
+    st.markdown("---")
+    st.markdown("### 🤖 AI Model Selection")
+    
+    model_provider = st.selectbox(
+        "Select AI Provider",
+        list(AVAILABLE_MODELS.keys()),
+        key="model_provider_selector"
+    )
+    
+    selected_model_display = st.selectbox(
+        "Select Model",
+        list(AVAILABLE_MODELS[model_provider].keys()),
+        key="model_selector"
+    )
+    
+    selected_model = AVAILABLE_MODELS[model_provider][selected_model_display]
+    
+    # Always update session state with current selection
+    st.session_state.selected_provider = model_provider
+    st.session_state.selected_model = selected_model
     
     st.markdown("---")
     st.markdown("### 📤 Upload Documents")
@@ -923,13 +973,24 @@ with st.sidebar:
                     st.session_state.database_loaded = True
                     st.session_state.scanned_databases = []
                     
-                    # Auto-initialize AI model with DeepSeek Chat
-                    if deepseek_api_key:
-                        llm = initialize_llm("API Models (DeepSeek)", "deepseek-chat", deepseek_api_key)
+                    # Auto-initialize AI model with selected provider
+                    selected_provider = st.session_state.get('selected_provider', 'DeepSeek')
+                    selected_model_name = st.session_state.get('selected_model', 'deepseek-chat')
+                    
+                    api_key = None
+                    if selected_provider == "DeepSeek":
+                        api_key = deepseek_api_key
+                    elif selected_provider == "ChatGPT (OpenAI)":
+                        api_key = openai_api_key
+                    elif selected_provider == "Groq":
+                        api_key = groq_api_key
+                    
+                    if api_key:
+                        llm = initialize_llm(selected_provider, selected_model_name, api_key)
                         if llm:
                             st.session_state.llm = llm
-                            st.session_state.model_provider = "API Models (DeepSeek)"
-                            st.session_state.selected_model = "deepseek-chat"
+                            st.session_state.model_provider = selected_provider
+                            st.session_state.selected_model = selected_model_name
                             st.session_state.llm_configured = True
                     
                     st.success("✅ Files Processed & AI Ready!")
@@ -965,7 +1026,12 @@ with st.sidebar:
     st.markdown("### ⚙️ Status")
     
     db_status = "🟢 Active" if st.session_state.database_loaded else "🔴 Not Loaded"
-    ai_status = "🟢 DeepSeek Chat" if st.session_state.llm_configured else "🔴 Not Ready"
+    
+    if st.session_state.llm_configured:
+        provider = st.session_state.get('model_provider', 'Unknown')
+        ai_status = f"🟢 {provider}"
+    else:
+        ai_status = "🔴 Not Ready"
     
     st.markdown(f"""
     <div style="font-size: 0.875rem;">
