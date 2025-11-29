@@ -1,3 +1,7 @@
+# Environment files with secrets
+.env
+.env.local
+
 # Virtual Environment
 .venv/
 venv/
@@ -42,3 +46,4 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+secrets.toml
