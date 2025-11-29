@@ -11,7 +11,14 @@ import glob
 from langchain_groq import ChatGroq
 from langchain_community.llms import Ollama
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+    CSVLoader,
+    UnstructuredWordDocumentLoader,
+    JSONLoader,
+    UnstructuredMarkdownLoader
+)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -104,6 +111,32 @@ try:
 except:
     groq_api_key = os.environ.get('GROQ_API_KEY')
 
+def load_document(file_path):
+    """Load document based on file type"""
+    file_ext = file_path.suffix.lower()
+    
+    try:
+        if file_ext == '.pdf':
+            loader = PyPDFLoader(str(file_path))
+        elif file_ext == '.txt':
+            loader = TextLoader(str(file_path), encoding='utf-8')
+        elif file_ext in ['.doc', '.docx']:
+            loader = UnstructuredWordDocumentLoader(str(file_path))
+        elif file_ext == '.csv':
+            loader = CSVLoader(str(file_path))
+        elif file_ext == '.json':
+            loader = JSONLoader(str(file_path), jq_schema='.', text_content=False)
+        elif file_ext in ['.md', '.markdown']:
+            loader = UnstructuredMarkdownLoader(str(file_path))
+        else:
+            # Try as text file for unknown types
+            loader = TextLoader(str(file_path), encoding='utf-8')
+        
+        return loader.load()
+    except Exception as e:
+        st.warning(f"⚠️ Could not load {file_path.name}: {str(e)}")
+        return []
+
 def clean_text(text):
     """Clean and validate text content"""
     if not text or not isinstance(text, str):
@@ -111,16 +144,20 @@ def clean_text(text):
     cleaned = text.encode('utf-8', errors='ignore').decode('utf-8').strip()
     return ' '.join(cleaned.split())
 
-def get_all_pdfs(folder_path):
-    """Get all PDFs from specified folder and subfolders"""
-    pdf_patterns = [
-        os.path.join(folder_path, "**/*.pdf"),
-        os.path.join(folder_path, "*.pdf")
-    ]
-    all_pdfs = []
-    for pattern in pdf_patterns:
-        all_pdfs.extend(glob.glob(pattern, recursive=True))
-    return [Path(pdf) for pdf in set(all_pdfs) if os.path.exists(pdf)]
+def get_all_documents(folder_path):
+    """Get all supported documents from specified folder and subfolders"""
+    supported_extensions = ['*.pdf', '*.txt', '*.docx', '*.doc', '*.csv', '*.json', '*.md', '*.markdown']
+    all_files = []
+    
+    for ext in supported_extensions:
+        patterns = [
+            os.path.join(folder_path, f"**/{ext}"),
+            os.path.join(folder_path, ext)
+        ]
+        for pattern in patterns:
+            all_files.extend(glob.glob(pattern, recursive=True))
+    
+    return [Path(f) for f in set(all_files) if os.path.exists(f)]
 
 def scan_folder_for_databases(folder_path):
     """Scan a folder for vector databases"""
@@ -185,8 +222,8 @@ def load_existing_database(db_path, db_folder):
         st.error(f"Error loading database: {e}")
         return None
 
-def create_new_database(pdf_files, save_folder):
-    """Create new vector database from PDF files"""
+def create_new_database(document_files, save_folder):
+    """Create new vector database from document files"""
     try:
         embeddings = HuggingFaceEmbeddings(
             model_name=f"sentence-transformers/{EMBEDDING_MODEL}",
@@ -194,30 +231,29 @@ def create_new_database(pdf_files, save_folder):
             encode_kwargs={'normalize_embeddings': True}
         )
 
-        with st.spinner(f"🔄 Processing {len(pdf_files)} PDFs..."):
+        with st.spinner(f"🔄 Processing {len(document_files)} documents..."):
             documents = []
             progress_bar = st.progress(0)
 
-            for i, pdf_path in enumerate(pdf_files):
+            for i, file_path in enumerate(document_files):
                 try:
-                    st.text(f"📄 Loading {pdf_path.name} ({i+1}/{len(pdf_files)})...")
-                    loader = PyPDFLoader(str(pdf_path))
-                    pdf_docs = loader.load()
+                    st.text(f"📄 Loading {file_path.name} ({i+1}/{len(document_files)})...")
+                    file_docs = load_document(file_path)
 
                     valid_docs = []
-                    for doc in pdf_docs:
+                    for doc in file_docs:
                         cleaned_content = clean_text(doc.page_content)
                         if len(cleaned_content) > 20:
                             doc.page_content = cleaned_content
-                            doc.metadata['source_file'] = pdf_path.name
-                            doc.metadata['full_path'] = str(pdf_path)
+                            doc.metadata['source_file'] = file_path.name
+                            doc.metadata['full_path'] = str(file_path)
                             valid_docs.append(doc)
 
                     documents.extend(valid_docs)
-                    progress_bar.progress((i + 1) / len(pdf_files))
+                    progress_bar.progress((i + 1) / len(document_files))
 
                 except Exception as e:
-                    st.warning(f"⚠️ Failed to load {pdf_path.name}: {str(e)}")
+                    st.warning(f"⚠️ Failed to load {file_path.name}: {str(e)}")
 
             st.text("✂️ Splitting documents...")
             text_splitter = RecursiveCharacterTextSplitter(
@@ -234,7 +270,7 @@ def create_new_database(pdf_files, save_folder):
             bm25_retriever.k = NUM_RESULTS
 
             st.text("💾 Saving database...")
-            config_str = f"{sorted([str(p) for p in pdf_files])}_{EMBEDDING_MODEL}_{CHUNK_SIZE}_{CHUNK_OVERLAP}"
+            config_str = f"{sorted([str(p) for p in document_files])}_{EMBEDDING_MODEL}_{CHUNK_SIZE}_{CHUNK_OVERLAP}"
             config_hash = hashlib.md5(config_str.encode()).hexdigest()[:12]
 
             os.makedirs(save_folder, exist_ok=True)
@@ -255,9 +291,9 @@ def create_new_database(pdf_files, save_folder):
                 'embedding_model': EMBEDDING_MODEL,
                 'chunk_size': CHUNK_SIZE,
                 'chunk_overlap': CHUNK_OVERLAP,
-                'total_pdfs': len(pdf_files),
+                'total_pdfs': len(document_files),
                 'total_chunks': len(final_documents),
-                'pdf_files': [str(p) for p in pdf_files],
+                'pdf_files': [str(p) for p in document_files],
                 'config_hash': config_hash
             }
 
@@ -849,10 +885,11 @@ with st.sidebar:
     st.markdown("### 📤 Upload Documents")
     
     uploaded_files = st.file_uploader(
-        "Upload PDF files",
-        type=['pdf'],
+        "Upload Documents",
+        type=['pdf', 'txt', 'docx', 'doc', 'csv', 'json', 'md', 'markdown'],
         accept_multiple_files=True,
-        key="pdf_uploader"
+        key="doc_uploader",
+        help="Supported: PDF, Word, Text, CSV, JSON, Markdown"
     )
     
     if uploaded_files:
