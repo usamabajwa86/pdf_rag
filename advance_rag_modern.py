@@ -45,8 +45,8 @@ AVAILABLE_MODELS = {
         "DeepSeek Coder": "deepseek-coder"
     },
     "ChatGPT (OpenAI)": {
-        "GPT-4": "gpt-4",
-        "GPT-4 Turbo": "gpt-4-turbo-preview",
+        "GPT-4o": "gpt-4o",
+        "GPT-4o Mini": "gpt-4o-mini",
         "GPT-3.5 Turbo": "gpt-3.5-turbo"
     },
     "Groq": {
@@ -120,21 +120,13 @@ def initialize_llm(model_provider, model_name, api_key=None):
 
 # Try to get API keys from secrets first, then env
 try:
-    deepseek_api_key = st.secrets.get('DEEPSEEK_API_KEY', os.environ.get('DEEPSEEK_API_KEY'))
-    openai_api_key = st.secrets.get('OPENAI_API_KEY', os.environ.get('OPENAI_API_KEY'))
-    groq_api_key = st.secrets.get('GROQ_API_KEY', os.environ.get('GROQ_API_KEY'))
-except:
-    deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY')
-    openai_api_key = os.environ.get('OPENAI_API_KEY')
-    groq_api_key = os.environ.get('GROQ_API_KEY')
-
-# Set default API keys if not found (fallback only, use secrets.toml or Streamlit Cloud Secrets)
-if not deepseek_api_key:
-    deepseek_api_key = os.environ.get('DEEPSEEK_KEY_FALLBACK', '')
-if not openai_api_key:
-    openai_api_key = os.environ.get('OPENAI_KEY_FALLBACK', '')
-if not groq_api_key:
-    groq_api_key = os.environ.get('GROQ_KEY_FALLBACK', '')
+    deepseek_api_key = st.secrets.get('DEEPSEEK_API_KEY') or os.environ.get('DEEPSEEK_API_KEY') or ''
+    openai_api_key = st.secrets.get('OPENAI_API_KEY') or os.environ.get('OPENAI_API_KEY') or ''
+    groq_api_key = st.secrets.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY') or ''
+except Exception as e:
+    deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY', '')
+    openai_api_key = os.environ.get('OPENAI_API_KEY', '')
+    groq_api_key = os.environ.get('GROQ_API_KEY', '')
 
 def load_document(file_path):
     """Load document based on file type"""
