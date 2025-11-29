@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import glob
 # LangChain imports
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain_community.llms import Ollama
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import (
@@ -47,12 +47,9 @@ AVAILABLE_MODELS = {
         "mistral:7b": "mistral:7b",
         "codellama:7b": "codellama:7b"
     },
-    "API Models (Groq)": {
-        "Llama 3.1 8B": "llama-3.1-8b-instant",
-        "Llama 3.1 70B": "llama-3.1-70b-versatile",
-        "Mixtral 8x7B": "mixtral-8x7b-32768",
-        "Gemma 2 9B": "gemma2-9b-it",
-        "GPT-OSS 120B": "openai/gpt-oss-120b"
+    "API Models (DeepSeek)": {
+        "DeepSeek Chat": "deepseek-chat",
+        "DeepSeek Coder": "deepseek-coder"
     }
 }
 
@@ -77,7 +74,7 @@ def get_available_ollama_models():
     except:
         return []
 
-def initialize_llm(model_provider, model_name, groq_api_key=None):
+def initialize_llm(model_provider, model_name, api_key=None):
     """Initialize the appropriate LLM based on provider"""
     try:
         if model_provider == "Local Models (Ollama)":
@@ -93,12 +90,17 @@ def initialize_llm(model_provider, model_name, groq_api_key=None):
 
             return Ollama(model=model_name, base_url="http://localhost:11434", temperature=0.1)
 
-        elif model_provider == "API Models (Groq)":
-            if not groq_api_key:
-                st.error("❌ GROQ_API_KEY not found!")
+        elif model_provider == "API Models (DeepSeek)":
+            if not api_key:
+                st.error("❌ DEEPSEEK_API_KEY not found!")
                 return None
 
-            return ChatGroq(groq_api_key=groq_api_key, model_name=model_name, temperature=0)
+            return ChatOpenAI(
+                api_key=api_key,
+                base_url="https://api.deepseek.com",
+                model=model_name,
+                temperature=0
+            )
 
         return None
     except Exception as e:
@@ -107,9 +109,13 @@ def initialize_llm(model_provider, model_name, groq_api_key=None):
 
 # Try to get API key from secrets first, then env
 try:
-    groq_api_key = st.secrets.get('GROQ_API_KEY', os.environ.get('GROQ_API_KEY'))
+    deepseek_api_key = st.secrets.get('DEEPSEEK_API_KEY', os.environ.get('DEEPSEEK_API_KEY'))
 except:
-    groq_api_key = os.environ.get('GROQ_API_KEY')
+    deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY')
+
+# Set default API key if not found
+if not deepseek_api_key:
+    deepseek_api_key = "sk-321b1d5fd53a4eba947f5e3a64213134"
 
 def load_document(file_path):
     """Load document based on file type"""
@@ -867,13 +873,13 @@ with st.sidebar:
                     st.session_state.metadata = metadata
                     st.session_state.database_loaded = True
                     
-                    # Auto-initialize AI model with GPT-OSS 120B
-                    if groq_api_key:
-                        llm = initialize_llm("API Models (Groq)", "openai/gpt-oss-120b", groq_api_key)
+                    # Auto-initialize AI model with DeepSeek Chat
+                    if deepseek_api_key:
+                        llm = initialize_llm("API Models (DeepSeek)", "deepseek-chat", deepseek_api_key)
                         if llm:
                             st.session_state.llm = llm
-                            st.session_state.model_provider = "API Models (Groq)"
-                            st.session_state.selected_model = "openai/gpt-oss-120b"
+                            st.session_state.model_provider = "API Models (DeepSeek)"
+                            st.session_state.selected_model = "deepseek-chat"
                             st.session_state.llm_configured = True
                     
                     st.success("✅ Database & AI Ready!")
@@ -917,13 +923,13 @@ with st.sidebar:
                     st.session_state.database_loaded = True
                     st.session_state.scanned_databases = []
                     
-                    # Auto-initialize AI model with GPT-OSS 120B
-                    if groq_api_key:
-                        llm = initialize_llm("API Models (Groq)", "openai/gpt-oss-120b", groq_api_key)
+                    # Auto-initialize AI model with DeepSeek Chat
+                    if deepseek_api_key:
+                        llm = initialize_llm("API Models (DeepSeek)", "deepseek-chat", deepseek_api_key)
                         if llm:
                             st.session_state.llm = llm
-                            st.session_state.model_provider = "API Models (Groq)"
-                            st.session_state.selected_model = "openai/gpt-oss-120b"
+                            st.session_state.model_provider = "API Models (DeepSeek)"
+                            st.session_state.selected_model = "deepseek-chat"
                             st.session_state.llm_configured = True
                     
                     st.success("✅ Files Processed & AI Ready!")
@@ -959,7 +965,7 @@ with st.sidebar:
     st.markdown("### ⚙️ Status")
     
     db_status = "🟢 Active" if st.session_state.database_loaded else "🔴 Not Loaded"
-    ai_status = "🟢 GPT-OSS 120B" if st.session_state.llm_configured else "🔴 Not Ready"
+    ai_status = "🟢 DeepSeek Chat" if st.session_state.llm_configured else "🔴 Not Ready"
     
     st.markdown(f"""
     <div style="font-size: 0.875rem;">
